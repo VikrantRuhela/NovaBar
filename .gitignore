@@ -1,0 +1,15 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/nav/jsViews.xml
+/build
+-built-in-report.html
+-redirect.html
+capture.png
+.cxx
+/app/build
+.DS_Store

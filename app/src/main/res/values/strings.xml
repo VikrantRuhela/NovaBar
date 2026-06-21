@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nova Bar</string>
+    <string name="notification_listener_label">Nova Bar Notification &amp; Media Service</string>
+    <string name="accessibility_service_label">Nova Bar Color Adapter Service</string>
+</resources>
