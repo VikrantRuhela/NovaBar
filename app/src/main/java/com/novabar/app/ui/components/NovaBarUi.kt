@@ -25,9 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -533,7 +531,8 @@ fun ChargingPill(
     state: ChargingState,
     currentState: NowBarState,
     color: Color,
-    textSizeOffset: Float
+    textSizeOffset: Float,
+    contentAlpha: Float = 1f
 ) {
     val sizeOffset = textSizeOffset
     when (currentState) {
@@ -588,7 +587,8 @@ fun ChargingPill(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(14.dp)
+                    .graphicsLayer { alpha = contentAlpha },
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
@@ -627,7 +627,10 @@ fun NotificationView(
     currentState: NowBarState,
     viewModel: OverlayViewModel,
     color: Color,
-    textSizeOffset: Float
+    textSizeOffset: Float,
+    contentAlpha: Float = 1f,
+    controlsAlpha: Float = 1f,
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val sizeOffset = textSizeOffset
     var offsetX by remember { mutableStateOf(0f) }
@@ -725,7 +728,9 @@ fun NotificationView(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = contentAlpha },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -759,7 +764,12 @@ fun NotificationView(
                     }
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = controlsAlpha
+                            translationY = controlsOffsetY.toPx()
+                        },
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = { viewModel.dismissNotification() }) {
@@ -779,6 +789,9 @@ fun TimerView(
     color: Color,
     showSeconds: Boolean,
     textSizeOffset: Float,
+    contentAlpha: Float = 1f,
+    controlsAlpha: Float = 1f,
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
     onInteraction: () -> Unit
 ) {
     val sizeOffset = textSizeOffset
@@ -854,7 +867,9 @@ fun TimerView(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = contentAlpha },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -879,11 +894,18 @@ fun TimerView(
                     color = color,
                     fontSize = (26f + sizeOffset).sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .graphicsLayer { alpha = contentAlpha }
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = controlsAlpha
+                            translationY = controlsOffsetY.toPx()
+                        },
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     Button(
@@ -933,6 +955,9 @@ fun StopwatchView(
     color: Color,
     showSeconds: Boolean,
     textSizeOffset: Float,
+    contentAlpha: Float = 1f,
+    controlsAlpha: Float = 1f,
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
     onInteraction: () -> Unit
 ) {
     val sizeOffset = textSizeOffset
@@ -1006,7 +1031,9 @@ fun StopwatchView(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = contentAlpha },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -1031,11 +1058,18 @@ fun StopwatchView(
                     color = color,
                     fontSize = (26f + sizeOffset).sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .graphicsLayer { alpha = contentAlpha }
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = controlsAlpha
+                            translationY = controlsOffsetY.toPx()
+                        },
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     Button(
@@ -1076,7 +1110,8 @@ fun NavigationView(
     currentState: NowBarState,
     color: Color,
     timeFormat: String,
-    textSizeOffset: Float
+    textSizeOffset: Float,
+    contentAlpha: Float = 1f
 ) {
     val sizeOffset = textSizeOffset
     val etaFormatted = formatEta(state.eta, timeFormat)
@@ -1134,7 +1169,8 @@ fun NavigationView(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(14.dp)
+                    .graphicsLayer { alpha = contentAlpha },
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
@@ -1352,7 +1388,10 @@ fun MediaView(
     visualizerSensitivity: Float,
     progressVisibility: Boolean,
     onSeekTo: (Long) -> Unit,
-    onInteraction: () -> Unit
+    onInteraction: () -> Unit,
+    contentAlpha: Float = 1f,
+    controlsAlpha: Float = 1f,
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     when (currentState) {
         NowBarState.MINIMIZED -> {
@@ -1476,7 +1515,9 @@ fun MediaView(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = contentAlpha },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -1524,7 +1565,14 @@ fun MediaView(
                     }
                 }
 
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = controlsAlpha
+                            translationY = controlsOffsetY.toPx()
+                        }
+                ) {
                     Slider(
                         value = sliderProgress,
                         onValueChange = {
@@ -1556,7 +1604,13 @@ fun MediaView(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .graphicsLayer {
+                            alpha = controlsAlpha
+                            translationY = controlsOffsetY.toPx()
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
