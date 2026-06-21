@@ -2,6 +2,7 @@ package com.novabar.app.ui.components
 
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -185,6 +186,16 @@ fun NovaBarUi() {
                 else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
             }
         }
+    }
+
+    var lastTargetState by remember { mutableStateOf<NowBarState?>(null) }
+    LaunchedEffect(targetState) {
+        if (lastTargetState != null && lastTargetState != targetState) {
+            Log.d("NovaBar", "CURRENT_STATE: $lastTargetState, TARGET_STATE: $targetState")
+        } else if (lastTargetState == null) {
+            Log.d("NovaBar", "CURRENT_STATE: null, TARGET_STATE: $targetState")
+        }
+        lastTargetState = targetState
     }
 
     val textSizeOffset = getTextSizeOffset(settings.textSize)

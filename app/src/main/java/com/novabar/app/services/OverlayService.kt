@@ -148,8 +148,16 @@ class OverlayService : Service() {
             x = (settings.offsetX * density).toInt()
             y = (settings.offsetY * density).toInt()
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                fitInsetsTypes = 0
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -171,12 +179,33 @@ class OverlayService : Service() {
                 setContent {
                     NovaBarUi()
                 }
-                setOnTouchListener { _, event ->
-                    if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) {
+                setOnTouchListener { view, event ->
+                    val action = event.action
+                    if (action == android.view.MotionEvent.ACTION_OUTSIDE) {
+                        Log.d("NovaBar", "OUTSIDE_TOUCH_DETECTED (ACTION_OUTSIDE)")
                         OverlayStateManager.collapse()
                         true
                     } else {
-                        false
+                        if (action == android.view.MotionEvent.ACTION_DOWN || action == android.view.MotionEvent.ACTION_UP) {
+                            val rx = event.rawX
+                            val ry = event.rawY
+                            val location = IntArray(2)
+                            view.getLocationOnScreen(location)
+                            val vx = location[0]
+                            val vy = location[1]
+                            val vw = view.width
+                            val vh = view.height
+                            
+                            if (rx < vx || rx > vx + vw || ry < vy || ry > vy + vh) {
+                                Log.d("NovaBar", "OUTSIDE_TOUCH_DETECTED (Manual coordinate check): touch=($rx, $ry), view=($vx, $vy, $vw, $vh)")
+                                OverlayStateManager.collapse()
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
                     }
                 }
                 addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
@@ -186,21 +215,26 @@ class OverlayService : Service() {
                     val oldHeight = oldBottom - oldTop
                     if (width != oldWidth || height != oldHeight) {
                         currentParams?.let { params ->
-                            params.width = width.coerceAtLeast(1)
-                            params.height = height.coerceAtLeast(1)
+                            // Keep width and height as WRAP_CONTENT to let WindowManager scale bounds dynamically
+                            params.width = WindowManager.LayoutParams.WRAP_CONTENT
+                            params.height = WindowManager.LayoutParams.WRAP_CONTENT
                             
-                            // If the view is essentially empty/hidden, make it non-touchable to restore screen area touches
-                            if (width <= 5 || height <= 5) {
-                                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                            } else {
-                                params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                            }
+                            val wasNotTouchable = (params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0
+                            val shouldBeNotTouchable = width <= 5 || height <= 5
                             
-                            if (isOverlayAdded) {
-                                try {
-                                    windowManager.updateViewLayout(this, params)
-                                } catch (e: Exception) {
-                                    Log.e("OverlayService", "Failed to update layout size in layout change listener", e)
+                            if (wasNotTouchable != shouldBeNotTouchable) {
+                                if (shouldBeNotTouchable) {
+                                    params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                                } else {
+                                    params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                                }
+                                
+                                if (isOverlayAdded) {
+                                    try {
+                                        windowManager.updateViewLayout(this, params)
+                                    } catch (e: Exception) {
+                                        Log.e("OverlayService", "Failed to update layout size in layout change listener", e)
+                                    }
                                 }
                             }
                         }

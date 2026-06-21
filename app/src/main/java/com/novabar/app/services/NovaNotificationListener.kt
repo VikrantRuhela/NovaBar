@@ -18,6 +18,8 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.novabar.app.data.SettingsRepository
 import com.novabar.app.domain.*
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 
@@ -180,7 +182,7 @@ class NovaNotificationListener : NotificationListenerService() {
     }
 
     private val tag = "NovaNotificationListener"
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     private lateinit var mediaSessionManager: MediaSessionManager
     private lateinit var settingsRepository: SettingsRepository
     private var activeControllers = mutableMapOf<MediaSession.Token, MediaControllerCallback>()
@@ -302,8 +304,9 @@ class NovaNotificationListener : NotificationListenerService() {
 
         fun register() {
             try {
-                controller.registerCallback(callback)
+                controller.registerCallback(callback, Handler(Looper.getMainLooper()))
                 updateState()
+                Log.d("NovaBar", "MEDIA_SESSION_FOUND: package=${controller.packageName}")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to register callback", e)
             }
@@ -312,6 +315,7 @@ class NovaNotificationListener : NotificationListenerService() {
         fun unregister() {
             try {
                 controller.unregisterCallback(callback)
+                Log.d("NovaBar", "MEDIA_SESSION_LOST: package=${controller.packageName}")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to unregister callback", e)
             }
@@ -376,6 +380,7 @@ class NovaNotificationListener : NotificationListenerService() {
                 isShuffleEnabled = isShuffle,
                 lastUpdateTime = System.currentTimeMillis()
             )
+            Log.d("NovaBar", "MEDIA_SESSION_UPDATED: package=${controller.packageName}, title=${state.title}, artist=${state.artist}, isPlaying=${state.isPlaying}")
         }
     }
 
@@ -384,12 +389,27 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         scope.launch {
             try {
-                val settings = settingsRepository.settingsFlow.first()
-                if (!settings.isEnabled) return@launch
-
                 val packageName = sbn.packageName
                 val notification = sbn.notification
                 val extras = notification.extras
+
+                // Check if it is a media notification, and if so, update active sessions immediately as a backup
+                val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
+                        notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION) ||
+                        packageName.contains("spotify") || packageName.contains("music") || packageName.contains("poweramp")
+                
+                if (isMedia) {
+                    val componentName = ComponentName(this@NovaNotificationListener, NovaNotificationListener::class.java)
+                    try {
+                        val controllers = mediaSessionManager.getActiveSessions(componentName)
+                        updateMediaSessions(controllers)
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to get active sessions in notification posted callback", e)
+                    }
+                }
+
+                val settings = settingsRepository.settingsFlow.first()
+                if (!settings.isEnabled) return@launch
 
                 // 0. Check if Phone Call Notification
                 val isCall = sbn.notification.category == Notification.CATEGORY_CALL ||

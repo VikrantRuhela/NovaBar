@@ -1,6 +1,7 @@
 package com.novabar.app.domain
 
 import android.graphics.Rect
+import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -31,14 +32,21 @@ object OverlayStateManager {
     val isExpanded = MutableStateFlow(false)
 
     fun expand() {
+        Log.d("NovaBar", "EXPAND_REQUEST")
         isExpanded.value = true
     }
 
     fun collapse() {
+        Log.d("NovaBar", "COLLAPSE_REQUEST")
         isExpanded.value = false
     }
 
     fun toggleExpanded() {
+        if (isExpanded.value) {
+            Log.d("NovaBar", "COLLAPSE_REQUEST")
+        } else {
+            Log.d("NovaBar", "EXPAND_REQUEST")
+        }
         isExpanded.value = !isExpanded.value
     }
 

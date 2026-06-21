@@ -31,7 +31,7 @@ data class NovaSettings(
     val barBorderThickness: Int = 1, // dp
     val barGravity: String = "Center", // "Center", "Left", "Right"
     val offsetX: Int = 0, // dp
-    val offsetY: Int = 12, // dp
+    val offsetY: Int = 0, // dp
     val showWhenIdle: Boolean = true,
 
     // NOW BAR STATE SYSTEM SETTINGS:
@@ -113,7 +113,7 @@ class SettingsRepository(private val context: Context) {
             barBorderThickness = preferences[BAR_BORDER_THICKNESS] ?: 1,
             barGravity = preferences[BAR_GRAVITY] ?: "Center",
             offsetX = preferences[OFFSET_X] ?: 0,
-            offsetY = preferences[OFFSET_Y] ?: (preferences[POSITION_Y] ?: 12),
+            offsetY = preferences[OFFSET_Y] ?: (preferences[POSITION_Y] ?: 0),
             showWhenIdle = preferences[SHOW_WHEN_IDLE] ?: true,
 
             defaultPresentationMode = preferences[DEFAULT_PRESENTATION_MODE] ?: "Compact",
