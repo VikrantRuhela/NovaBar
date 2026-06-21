@@ -6,26 +6,86 @@ import android.hardware.HardwareBuffer
 import android.os.Build
 import android.util.Log
 import android.view.Display
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import androidx.core.graphics.ColorUtils
 import com.novabar.app.data.SettingsRepository
+import com.novabar.app.data.NovaSettings
+import com.novabar.app.data.OverlayEngine
+import com.novabar.app.domain.DiagnosticsManager
 import com.novabar.app.utils.LuminanceManager
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 
 class NovaAccessibilityService : AccessibilityService() {
 
     private val tag = "NovaAccessibilityService"
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     private lateinit var settingsRepository: SettingsRepository
+    private var settingsJob: Job? = null
+    private lateinit var overlayHost: OverlayHost
 
     override fun onCreate() {
         super.onCreate()
         settingsRepository = SettingsRepository(applicationContext)
+        overlayHost = OverlayHost(this)
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        DiagnosticsManager.overlayEngine.value = "ACCESSIBILITY"
+        DiagnosticsManager.accessibilityServiceEnabled.value = true
+        DiagnosticsManager.accessibilityOverlayActive.value = false
+
+        settingsJob?.cancel()
+        settingsJob = scope.launch {
+            settingsRepository.settingsFlow.collectLatest { settings ->
+                if (settings.isEnabled && settings.overlayEngine == OverlayEngine.ACCESSIBILITY) {
+                    showOverlay(settings)
+                } else {
+                    removeOverlay()
+                }
+            }
+        }
+
+        // Listen for reset/recreate request from Diagnostics
+        scope.launch {
+            DiagnosticsManager.resetTrigger.collectLatest { trigger ->
+                if (trigger > 0) {
+                    val settings = settingsRepository.settingsFlow.first()
+                    if (settings.isEnabled && settings.overlayEngine == OverlayEngine.ACCESSIBILITY) {
+                        removeOverlay()
+                        delay(200)
+                        showOverlay(settings)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showOverlay(settings: NovaSettings) {
+        overlayHost.show(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, settings)
+        DiagnosticsManager.accessibilityOverlayActive.value = true
+    }
+
+    private fun removeOverlay() {
+        overlayHost.remove()
+        DiagnosticsManager.accessibilityOverlayActive.value = false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        val eventTypeStr = try {
+            AccessibilityEvent.eventTypeToString(event.eventType)
+        } catch (e: Exception) {
+            "Unknown (${event.eventType})"
+        }
+        val pkg = event.packageName?.toString() ?: "Unknown"
+        DiagnosticsManager.lastAccessibilityEvent.value = "$eventTypeStr (pkg=$pkg)"
+        
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            DiagnosticsManager.accessibilityForegroundPackage.value = pkg
+            DiagnosticsManager.currentActivity.value = pkg
             scope.launch {
                 val settings = settingsRepository.settingsFlow.first()
                 if (settings.isEnabled && settings.colorAdaptationEnabled) {
@@ -41,6 +101,10 @@ class NovaAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        DiagnosticsManager.accessibilityServiceEnabled.value = false
+        DiagnosticsManager.accessibilityOverlayActive.value = false
+        settingsJob?.cancel()
+        removeOverlay()
         scope.cancel()
     }
 

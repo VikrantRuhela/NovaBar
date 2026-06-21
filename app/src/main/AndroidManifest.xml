@@ -55,7 +55,6 @@
             android:label="@string/accessibility_service_label"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.view.InputMethod" />
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data

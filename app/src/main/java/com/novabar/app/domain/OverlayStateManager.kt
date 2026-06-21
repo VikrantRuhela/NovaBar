@@ -186,5 +186,15 @@ object OverlayStateManager {
                 previousList = currentList
             }
         }
+        scope.launch {
+            activeActivities.collect { list ->
+                DiagnosticsManager.currentPriorityActivity.value = if (list.isEmpty()) "None" else list.joinToString { it::class.java.simpleName }
+            }
+        }
+        scope.launch {
+            activeState.collect { state ->
+                DiagnosticsManager.currentPresentationState.value = state::class.java.simpleName
+            }
+        }
     }
 }

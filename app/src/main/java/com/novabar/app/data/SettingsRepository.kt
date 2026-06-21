@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "nova_settings")
 
+enum class OverlayEngine {
+    APPLICATION,
+    ACCESSIBILITY
+}
+
 data class NovaSettings(
     val isEnabled: Boolean = true,
     val positionY: Int = 12, // Legacy position Y
@@ -46,7 +51,8 @@ data class NovaSettings(
     val alwaysOnBar: Boolean = false,
     val alwaysOnConfig: String = "Time • Battery",
     val timeFormat: String = "System Default",
-    val showSeconds: Boolean = false
+    val showSeconds: Boolean = false,
+    val overlayEngine: OverlayEngine = OverlayEngine.APPLICATION
 )
 
 class SettingsRepository(private val context: Context) {
@@ -89,6 +95,7 @@ class SettingsRepository(private val context: Context) {
         private val ALWAYS_ON_CONFIG = stringPreferencesKey("always_on_config")
         private val TIME_FORMAT = stringPreferencesKey("time_format")
         private val SHOW_SECONDS = booleanPreferencesKey("show_seconds")
+        private val OVERLAY_ENGINE = stringPreferencesKey("overlay_engine")
     }
 
     val settingsFlow: Flow<NovaSettings> = context.dataStore.data.map { preferences ->
@@ -127,7 +134,11 @@ class SettingsRepository(private val context: Context) {
             alwaysOnBar = preferences[ALWAYS_ON_BAR] ?: false,
             alwaysOnConfig = preferences[ALWAYS_ON_CONFIG] ?: "Time • Battery",
             timeFormat = preferences[TIME_FORMAT] ?: "System Default",
-            showSeconds = preferences[SHOW_SECONDS] ?: false
+            showSeconds = preferences[SHOW_SECONDS] ?: false,
+            overlayEngine = when (preferences[OVERLAY_ENGINE] ?: "application") {
+                "accessibility" -> OverlayEngine.ACCESSIBILITY
+                else -> OverlayEngine.APPLICATION
+            }
         )
     }
 
@@ -279,6 +290,15 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateOverlayEngine(engine: OverlayEngine) {
+        context.dataStore.edit { preferences ->
+            preferences[OVERLAY_ENGINE] = when (engine) {
+                OverlayEngine.ACCESSIBILITY -> "accessibility"
+                OverlayEngine.APPLICATION -> "application"
+            }
+        }
+    }
+
     suspend fun importSettings(s: NovaSettings) {
         context.dataStore.edit { preferences ->
             preferences[IS_ENABLED] = s.isEnabled
@@ -317,6 +337,10 @@ class SettingsRepository(private val context: Context) {
             preferences[ALWAYS_ON_CONFIG] = s.alwaysOnConfig
             preferences[TIME_FORMAT] = s.timeFormat
             preferences[SHOW_SECONDS] = s.showSeconds
+            preferences[OVERLAY_ENGINE] = when (s.overlayEngine) {
+                OverlayEngine.ACCESSIBILITY -> "accessibility"
+                OverlayEngine.APPLICATION -> "application"
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.novabar.app.data.NovaSettings
 import com.novabar.app.data.SettingsRepository
+import com.novabar.app.data.OverlayEngine
 import com.novabar.app.domain.OverlayState
 import com.novabar.app.domain.OverlayStateManager
 import com.novabar.app.utils.LuminanceManager
@@ -173,6 +174,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
 
     fun importSettings(settings: NovaSettings) = viewModelScope.launch {
         repository.importSettings(settings)
+    }
+
+    fun setOverlayEngine(engine: OverlayEngine) = viewModelScope.launch {
+        repository.updateOverlayEngine(engine)
     }
 }
 

@@ -1,6 +1,10 @@
 package com.novabar.app
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.util.Log
+import com.novabar.app.data.OverlayEngine
+import com.novabar.app.domain.DiagnosticsManager
+import androidx.compose.ui.text.style.TextOverflow
 import android.content.*
 import android.net.Uri
 import android.os.Build
@@ -455,6 +459,30 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        Text("Overlay Engine", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(OverlayEngine.APPLICATION, OverlayEngine.ACCESSIBILITY).forEach { engine ->
+                val selected = settings.overlayEngine == engine
+                val label = when (engine) {
+                    OverlayEngine.APPLICATION -> "Application Overlay"
+                    OverlayEngine.ACCESSIBILITY -> "Accessibility Overlay"
+                }
+                Button(
+                    onClick = { viewModel.setOverlayEngine(engine) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(label, fontSize = 11.sp, maxLines = 1)
+                }
+            }
+        }
+
         Text("Time Format", fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -554,6 +582,15 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 Text("Import Backup")
             }
         }
+
+        Divider()
+
+        DiagnosticsDashboard(
+            context = context,
+            hasNotificationPermission = hasNotificationPermission.value,
+            hasAccessibilityPermission = hasAccessibilityPermission.value,
+            hasOverlayPermission = hasOverlayPermission.value
+        )
     }
 }
 
@@ -787,6 +824,322 @@ private fun importSettings(str: String): NovaSettings? {
         }
     } catch (e: Exception) {
         null
+    }
+}
+
+@Composable
+fun DiagnosticsDashboard(
+    context: Context,
+    hasNotificationPermission: Boolean,
+    hasAccessibilityPermission: Boolean,
+    hasOverlayPermission: Boolean
+) {
+    var showDashboard by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Developer Diagnostics Dashboard", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Real-time debugging parameters", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                }
+                Switch(
+                    checked = showDashboard,
+                    onCheckedChange = { showDashboard = it }
+                )
+            }
+
+            if (showDashboard) {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Collect StateFlows from DiagnosticsManager
+                val overlayEngine by DiagnosticsManager.overlayEngine.collectAsState()
+                val windowType by DiagnosticsManager.windowType.collectAsState()
+                val touchableState by DiagnosticsManager.touchableState.collectAsState()
+                val currentActivity by DiagnosticsManager.currentActivity.collectAsState()
+                val currentPresentationState by DiagnosticsManager.currentPresentationState.collectAsState()
+                val blurEnabled by DiagnosticsManager.blurEnabled.collectAsState()
+                val blurBackend by DiagnosticsManager.blurBackend.collectAsState()
+                val windowWidth by DiagnosticsManager.windowWidth.collectAsState()
+                val windowHeight by DiagnosticsManager.windowHeight.collectAsState()
+                val touchEventsReceived by DiagnosticsManager.touchEventsReceived.collectAsState()
+
+                val mediaSessionActive by DiagnosticsManager.mediaSessionActive.collectAsState()
+                val mediaAppName by DiagnosticsManager.mediaAppName.collectAsState()
+                val mediaPackageName by DiagnosticsManager.mediaPackageName.collectAsState()
+                val mediaPlaybackState by DiagnosticsManager.mediaPlaybackState.collectAsState()
+                val mediaTrackTitle by DiagnosticsManager.mediaTrackTitle.collectAsState()
+                val mediaArtist by DiagnosticsManager.mediaArtist.collectAsState()
+                val mediaProgress by DiagnosticsManager.mediaProgress.collectAsState()
+                val mediaControlsAvailable by DiagnosticsManager.mediaControlsAvailable.collectAsState()
+                val lastMediaUpdateTimestamp by DiagnosticsManager.lastMediaUpdateTimestamp.collectAsState()
+
+                val notificationListenerConnected by DiagnosticsManager.notificationListenerConnected.collectAsState()
+                val lastNotificationApp by DiagnosticsManager.lastNotificationApp.collectAsState()
+                val lastNotificationPackage by DiagnosticsManager.lastNotificationPackage.collectAsState()
+                val notificationCount by DiagnosticsManager.notificationCount.collectAsState()
+
+                val accessibilityOverlayActive by DiagnosticsManager.accessibilityOverlayActive.collectAsState()
+                val lastAccessibilityEvent by DiagnosticsManager.lastAccessibilityEvent.collectAsState()
+                val accessibilityForegroundPackage by DiagnosticsManager.accessibilityForegroundPackage.collectAsState()
+
+                val overlayVisible by DiagnosticsManager.overlayVisible.collectAsState()
+                val overlayAttached by DiagnosticsManager.overlayAttached.collectAsState()
+                val currentOverlayBounds by DiagnosticsManager.currentOverlayBounds.collectAsState()
+                val currentPriorityActivity by DiagnosticsManager.currentPriorityActivity.collectAsState()
+
+                // Display Sections
+                DiagnosticsSection(title = "General Settings") {
+                    DiagnosticsRow("Overlay Engine", overlayEngine)
+                    DiagnosticsRow("Window Type", windowType)
+                    DiagnosticsRow("Touchable State", touchableState)
+                    DiagnosticsRow("Current Activity", currentActivity)
+                    DiagnosticsRow("Current State", currentPresentationState)
+                    DiagnosticsRow("Blur Enabled", blurEnabled.toString())
+                    DiagnosticsRow("Blur Backend", blurBackend)
+                    DiagnosticsRow("Dimensions", "${windowWidth}x${windowHeight} px")
+                    DiagnosticsRow("Touch Count", touchEventsReceived.toString())
+                }
+
+                DiagnosticsSection(title = "Media Playback Status") {
+                    DiagnosticsRow("Active Session", mediaSessionActive.toString())
+                    DiagnosticsRow("App Name", mediaAppName)
+                    DiagnosticsRow("Package", mediaPackageName)
+                    DiagnosticsRow("Playback State", mediaPlaybackState)
+                    DiagnosticsRow("Track Title", mediaTrackTitle)
+                    DiagnosticsRow("Artist", mediaArtist)
+                    DiagnosticsRow("Progress", mediaProgress)
+                    DiagnosticsRow("Controls", mediaControlsAvailable)
+                    DiagnosticsRow("Last Updated", lastMediaUpdateTimestamp)
+                }
+
+                DiagnosticsSection(title = "Notifications & Listener") {
+                    DiagnosticsRow("Listener Connected", notificationListenerConnected.toString())
+                    DiagnosticsRow("Last App Name", lastNotificationApp)
+                    DiagnosticsRow("Last Package", lastNotificationPackage)
+                    DiagnosticsRow("Listener Count", notificationCount.toString())
+                    DiagnosticsRow("Permission", if (hasNotificationPermission) "GRANTED" else "DENIED")
+                }
+
+                DiagnosticsSection(title = "Accessibility Engine") {
+                    DiagnosticsRow("Service Running", if (hasAccessibilityPermission) "ENABLED" else "DISABLED")
+                    DiagnosticsRow("Overlay Active", accessibilityOverlayActive.toString())
+                    DiagnosticsRow("Last Event Type", lastAccessibilityEvent)
+                    DiagnosticsRow("Foreground App", accessibilityForegroundPackage)
+                }
+
+                DiagnosticsSection(title = "Overlay Layout Tree") {
+                    DiagnosticsRow("Overlay Shown", overlayVisible.toString())
+                    DiagnosticsRow("View Attached", overlayAttached.toString())
+                    DiagnosticsRow("Overlay Bounds", currentOverlayBounds)
+                    DiagnosticsRow("Priority Activity", currentPriorityActivity)
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Debug Actions Buttons Grid
+                Text("Debug Actions", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            Toast.makeText(context, "Diagnostics refreshed!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Refresh", fontSize = 10.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            com.novabar.app.domain.OverlayStateManager.expand()
+                            Toast.makeText(context, "Force Expand requested", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Expand", fontSize = 10.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            com.novabar.app.domain.OverlayStateManager.collapse()
+                            Toast.makeText(context, "Force Collapse requested", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Collapse", fontSize = 10.sp, maxLines = 1)
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            DiagnosticsManager.resetTrigger.value += 1
+                            Toast.makeText(context, "Recreating Overlay View...", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Reset Overlay", fontSize = 10.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            com.novabar.app.domain.OverlayStateManager.updateNotification(
+                                com.novabar.app.domain.NotificationState(
+                                    id = "test_diagnostics_id",
+                                    packageName = "com.novabar.app",
+                                    appName = "Nova Bar Test",
+                                    title = "Diagnostics Testing",
+                                    summary = "Simulating active overlay alerts."
+                                )
+                            )
+                            Toast.makeText(context, "Injected Test Overlay", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Test UI", fontSize = 10.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            val list = com.novabar.app.domain.OverlayStateManager.activeActivities.value
+                            val current = com.novabar.app.domain.OverlayStateManager.activeState.value
+                            val report = "Active States: ${list.joinToString { it::class.java.simpleName }}, Current: ${current::class.java.simpleName}"
+                            Log.d("NovaBarDiagnostics", "STATE_DUMP: $report")
+                            Toast.makeText(context, "State dumped to Logcat!", Toast.LENGTH_LONG).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Dump State", fontSize = 10.sp, maxLines = 1)
+                    }
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Logging, Copying & Sharing buttons
+                val generateReport = {
+                    val list = com.novabar.app.domain.OverlayStateManager.activeActivities.value
+                    val currentState = com.novabar.app.domain.OverlayStateManager.activeState.value
+                    """
+                    # Nova Bar Runtime Diagnostics Report
+                    Generated: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}
+                    
+                    ## 1. General Info
+                    - Overlay Engine: $overlayEngine
+                    - Window Type: $windowType
+                    - Touchable State: $touchableState
+                    - Current Activity: $currentActivity
+                    - Current State: $currentPresentationState
+                    - Blur Enabled: $blurEnabled
+                    - Blur Backend: $blurBackend
+                    - Dimensions: ${windowWidth}x${windowHeight} px
+                    - Touch Count: $touchEventsReceived
+                    
+                    ## 2. Media Playback
+                    - Active Session: $mediaSessionActive
+                    - App Name: $mediaAppName
+                    - Package Name: $mediaPackageName
+                    - Playback State: $mediaPlaybackState
+                    - Track Title: $mediaTrackTitle
+                    - Artist: $mediaArtist
+                    - Progress: $mediaProgress
+                    - Controls Available: $mediaControlsAvailable
+                    - Last Update: $lastMediaUpdateTimestamp
+                    
+                    ## 3. Notifications & Listener
+                    - Listener Connected: $notificationListenerConnected
+                    - Last Notification App: $lastNotificationApp
+                    - Last Notification Package: $lastNotificationPackage
+                    - Notification Count: $notificationCount
+                    - Notification Access: ${if (hasNotificationPermission) "GRANTED" else "DENIED"}
+                    
+                    ## 4. Accessibility Service
+                    - Enabled: ${if (hasAccessibilityPermission) "ENABLED" else "DISABLED"}
+                    - Overlay Active: $accessibilityOverlayActive
+                    - Last Event: $lastAccessibilityEvent
+                    - Foreground App: $accessibilityForegroundPackage
+                    
+                    ## 5. Overlay Layout Tree
+                    - Overlay Visible: $overlayVisible
+                    - Overlay Attached: $overlayAttached
+                    - Overlay Bounds: $currentOverlayBounds
+                    - Priority Activity List: $currentPriorityActivity
+                    """.trimIndent()
+                }
+
+                Text("Logs & Exporting", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val report = generateReport()
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Nova Bar Diagnostics", report))
+                            Toast.makeText(context, "Report copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Copy Report", fontSize = 11.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            val report = generateReport()
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Nova Bar Runtime Diagnostics")
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share Diagnostics"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Share Report", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagnosticsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun DiagnosticsRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        Text(value, fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

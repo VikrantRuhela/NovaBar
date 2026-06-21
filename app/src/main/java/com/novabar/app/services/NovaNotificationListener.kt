@@ -202,6 +202,7 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.d(tag, "Notification listener connected")
+        DiagnosticsManager.notificationListenerConnected.value = true
         try {
             val componentName = ComponentName(this, NovaNotificationListener::class.java)
             try {
@@ -224,6 +225,7 @@ class NovaNotificationListener : NotificationListenerService() {
             } catch (e: Exception) {
                 null
             }
+            DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0
             activeNotifs?.forEach { sbn ->
                 try {
                     onNotificationPosted(sbn)
@@ -238,6 +240,7 @@ class NovaNotificationListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        DiagnosticsManager.notificationListenerConnected.value = false
         try {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionsChangedListener)
         } catch (e: Exception) {
@@ -290,9 +293,40 @@ class NovaNotificationListener : NotificationListenerService() {
         if (playing != null) {
             activeController = playing.controller
             OverlayStateManager.mediaState.value = playing.state
+
+            // Diagnostics
+            DiagnosticsManager.mediaSessionActive.value = true
+            DiagnosticsManager.mediaAppName.value = playing.state.appName
+            DiagnosticsManager.mediaPackageName.value = playing.controller.packageName
+            DiagnosticsManager.mediaPlaybackState.value = if (playing.isPlaying()) "Playing" else "Paused/Stopped"
+            DiagnosticsManager.mediaTrackTitle.value = playing.state.title
+            DiagnosticsManager.mediaArtist.value = playing.state.artist
+            DiagnosticsManager.mediaProgress.value = "${((playing.state.progress) * 100).toInt()}%"
+            
+            // Controls Available
+            val caps = playing.controller.playbackState?.actions ?: 0L
+            val controls = mutableListOf<String>()
+            if (caps and PlaybackState.ACTION_PLAY != 0L) controls.add("Play")
+            if (caps and PlaybackState.ACTION_PAUSE != 0L) controls.add("Pause")
+            if (caps and PlaybackState.ACTION_SKIP_TO_NEXT != 0L) controls.add("Next")
+            if (caps and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L) controls.add("Prev")
+            DiagnosticsManager.mediaControlsAvailable.value = if (controls.isEmpty()) "None" else controls.joinToString(", ")
+            
+            DiagnosticsManager.lastMediaUpdateTimestamp.value = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(playing.state.lastUpdateTime))
         } else {
             activeController = null
             OverlayStateManager.mediaState.value = null
+
+            // Diagnostics
+            DiagnosticsManager.mediaSessionActive.value = false
+            DiagnosticsManager.mediaAppName.value = "None"
+            DiagnosticsManager.mediaPackageName.value = "None"
+            DiagnosticsManager.mediaPlaybackState.value = "None"
+            DiagnosticsManager.mediaTrackTitle.value = "None"
+            DiagnosticsManager.mediaArtist.value = "None"
+            DiagnosticsManager.mediaProgress.value = "0%"
+            DiagnosticsManager.mediaControlsAvailable.value = "None"
+            DiagnosticsManager.lastMediaUpdateTimestamp.value = "None"
         }
     }
 
@@ -578,6 +612,17 @@ class NovaNotificationListener : NotificationListenerService() {
                         }
                     }
                 }
+                val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
+                DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0
+                val appLabel = try {
+                    val pm = packageManager
+                    val appInfo = pm.getApplicationInfo(packageName, 0)
+                    pm.getApplicationLabel(appInfo).toString()
+                } catch (ex: Exception) {
+                    packageName
+                }
+                DiagnosticsManager.lastNotificationApp.value = appLabel
+                DiagnosticsManager.lastNotificationPackage.value = packageName
             } catch (e: Exception) {
                 Log.e(tag, "Error handling posted notification", e)
             }
@@ -615,6 +660,8 @@ class NovaNotificationListener : NotificationListenerService() {
                     OverlayStateManager.timerState.value = null
                     OverlayStateManager.stopwatchState.value = null
                 }
+                val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
+                DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0
             } catch (e: Exception) {
                 Log.e(tag, "Error handling removed notification", e)
             }
