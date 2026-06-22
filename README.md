@@ -293,6 +293,25 @@ Compatibility may vary depending on manufacturer restrictions and battery optimi
 Nova Bar was inspired by modern live activity systems and Samsung's Now Bar experience while being designed specifically for broader Android compatibility.
 
 ---
+
+## Previews
+
+### media__1782139962171.jpg
+![media__1782139962171.jpg](assets/media__1782139962171.jpg)
+
+### media__1782139962319.jpg
+![media__1782139962319.jpg](assets/media__1782139962319.jpg)
+
+### media__1782139962437.jpg
+![media__1782139962437.jpg](assets/media__1782139962437.jpg)
+
+### media__1782139962442.jpg
+![media__1782139962442.jpg](assets/media__1782139962442.jpg)
+
+### media__1782139966952.jpg
+![media__1782139966952.jpg](assets/media__1782139966952.jpg)
+
+---
 ## License
 
 Nova Bar is licensed under the MIT License.
