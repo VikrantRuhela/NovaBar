@@ -1,138 +1,300 @@
 # Nova Bar
 
-A Samsung One UI-inspired live activity bar for Android.
+Modern live activities for Android.
 
-Nova Bar brings contextual live activities to any Android device through a lightweight system overlay. Track music playback, timers, navigation, notifications, charging status, and more without interrupting your workflow.
+Nova Bar brings contextual, glanceable information directly to the status bar area through a lightweight overlay system. Inspired by modern mobile UI experiences, it provides quick access to media playback, timers, navigation, notifications, calls, charging status, and more without requiring root access.
 
-Built with Kotlin, Jetpack Compose, and modern Android APIs.
+Designed for older Android versions that never received native live activities, Nova Bar focuses on being fast, customizable, and system-like.
 
-## ✨ Features
+---
 
-### 🎵 Media Controls
+## Features
+
+### 🎵 Media Playback
 
 * Real-time media session detection
 * Album artwork support
-* Playback controls
-* Interactive seek bar
-* Playback progress tracking
-* Spotify, YouTube Music, Samsung Music, PowerAmp and other MediaSession-compatible apps
+* Play / Pause controls
+* Previous / Next controls
+* Playback progress support
+* Minimized and Compact media views
+* Automatic app detection
 
-### 🔔 Smart Notifications
+### ⏱ Timers & Stopwatch
 
-* Application-aware notifications
-* Clean compact presentation
-* Privacy-friendly notification mode
-* Automatic activity prioritization
+* Active timer detection
+* Active stopwatch detection
+* Live countdown updates
+* Clean HH:MM:SS formatting
+* Minimized and Compact views
 
-### ⏱ Activity Tracking
+### 🧭 Navigation
 
+* Active navigation session detection
+* Route information support
+* Compact navigation activity display
+
+### 🔔 Notifications
+
+* Displays app names instead of package names
+* Clean notification presentation
+* Compact activity display
+* Quick glance information
+
+### 📞 Calls
+
+* Active call detection
+* Compact call activity
+* End call support
+* Real-time call state updates
+
+### ⚡ Charging Activity
+
+* Live battery percentage display
+* Dynamic charging activity
+* Battery reservoir animation
+* Charging status updates
+
+---
+
+## Activity System
+
+Nova Bar automatically adapts based on what you're currently doing.
+
+Supported activities include:
+
+* Media Playback
 * Timers
-* Stopwatch sessions
-* Charging status
-* Navigation activities
-* Incoming calls
+* Stopwatch
+* Navigation
+* Notifications
+* Charging
+* Calls
 
-### 🎨 Customizable UI
+Every activity includes:
 
-* Minimized, Compact and Expanded modes
-* Adjustable text size
-* Blur strength controls
-* Corner radius customization
-* Animation speed controls
-* Opacity controls
-* Multiple visualizer styles
+### Minimized View
 
-### 🌈 Dynamic Appearance
+Shows only the most important information.
 
-* Glassmorphism design
-* Dynamic color adaptation
-* Album art color extraction
-* Automatic light/dark foreground adjustment
-* Smooth Samsung-inspired animations
+Examples:
 
-### ⚡ Performance Focused
+* Album artwork + visualizer
+* Timer icon + remaining time
+* Navigation indicator
+* Battery percentage
+* Notification icon
 
-* Lightweight overlay architecture
-* MediaSession-based updates
-* Efficient activity tracking
-* Battery-conscious design
-* Optimized Compose rendering
+### Compact View
 
-## 📱 Modes
+Displays additional information and controls while maintaining a lightweight footprint.
 
-### Minimized
+Examples:
 
-Ultra compact glanceable activity view.
+* Media controls
+* Timer information
+* Navigation details
+* Notification details
+* Call controls
 
-### Compact
+---
 
-Balanced information density for everyday use.
+## Overlay Engine
 
-### Expanded
+Nova Bar supports two overlay engines.
 
-Rich interactive controls and detailed activity information.
+### Application Overlay
 
-## 🏗️ Built With
+Uses Android's standard overlay system.
 
-* Kotlin
-* Jetpack Compose
-* Material 3
-* Coroutines
-* StateFlow
-* DataStore
-* MediaSession APIs
-* Notification Listener Service
-* WindowManager Overlay APIs
+### Accessibility Overlay
 
-## 🚀 Installation
+Uses Android Accessibility Services to render above the status bar area without root access.
+
+Benefits:
+
+* Better integration with System UI
+* Status bar level rendering
+* Improved immersion
+* More native appearance
+
+---
+
+## Customization
+
+### Position
+
+* Left Alignment
+* Center Alignment
+* Right Alignment
+
+### Alignment-Aware Expansion
+
+Nova Bar intelligently expands according to its position.
+
+#### Left Alignment
+
+* Left edge remains fixed
+* Expands toward the right
+
+#### Center Alignment
+
+* Expands symmetrically
+
+#### Right Alignment
+
+* Right edge remains fixed
+* Expands toward the left
+
+This ensures the activity panel remains visible and avoids rendering outside the screen boundaries.
+
+### Appearance
+
+* Transparency control
+* Width scaling
+* Height adjustments
+* Vertical offset
+* Horizontal offset
+* 12-hour clock support
+* Always-On Bar option
+* Show on Lockscreen toggle
+
+---
+
+## Permissions
+
+Nova Bar requires the following permissions:
+
+### Accessibility Service
+
+Required for:
+
+* Accessibility Overlay engine
+* Enhanced system integration
+* Activity detection
+* Overlay rendering
+
+### Notification Access
+
+Required for:
+
+* Media playback detection
+* Notifications
+* Timers
+* Stopwatch activities
+* Navigation activity detection
+
+### Display Over Other Apps
+
+Required when using the Application Overlay engine.
+
+### Phone / Call Control Permission
+
+Required for:
+
+* Call activity detection
+* Call state monitoring
+* End call functionality
+
+Nova Bar only uses call-related permissions to provide call activities and call controls inside the bar.
+
+No call data is collected, stored, or transmitted.
+
+Nova Bar includes a built-in permissions dashboard with real-time status indicators for all required permissions.
+
+
+---
+
+## Design Goals
+
+Nova Bar was built around four principles:
+
+### Lightweight
+
+The overlay remains compact and unobtrusive.
+
+### System-Like
+
+Animations, interactions, and layouts are designed to feel like a native Android component.
+
+### Customizable
+
+Users control positioning, alignment, transparency, sizing, and behavior.
+
+### Practical
+
+Information should be available at a glance without interrupting the current task.
+
+---
+
+## Privacy
+
+Nova Bar does not:
+
+* Collect personal data
+* Upload information to external servers
+* Include analytics
+* Include tracking
+
+All processing happens locally on your device.
+
+---
+
+## Compatibility
+
+### Minimum Android Version
+
+Android 12+
+
+### Tested Devices
+
+* Samsung Galaxy A21s
+* One UI 4
+
+Compatibility may vary depending on manufacturer restrictions and battery optimization policies.
+
+---
+
+## Installation
 
 1. Download the latest APK from Releases.
-2. Install the application.
-3. Grant Overlay permission.
-4. Grant Notification Access.
-5. Configure Nova Bar from Settings.
+2. Install Nova Bar.
+3. Grant required permissions.
+4. Enable your preferred overlay engine.
+5. Customize the layout.
+6. Enjoy modern live activities on Android.
 
-## 🔐 Permissions
+---
 
-Nova Bar requires a small set of permissions to provide live activity functionality:
+## Known Limitations
 
-| Permission              | Purpose                              |
-| ----------------------- | ------------------------------------ |
-| Display over other apps | Render Nova Bar overlay              |
-| Notification Access     | Activity detection and notifications |
-| Foreground Service      | Persistent background operation      |
+* Timer synchronization may occasionally differ from the source timer by a fraction of a second depending on notification update timing.
+* Some manufacturers may aggressively restrict background services.
 
-Nova Bar does not collect or transmit personal data.
+---
 
-## 🎛️ Configuration
+## Roadmap
 
-Customize:
+### v1.1
 
-* Default display mode
-* Text size
-* Blur intensity
-* Corner radius
-* Animation speed
-* Overlay position
-* Auto-collapse behavior
-* Activity priority rules
-* Visualizer style
-
-
-## 🛣️ Roadmap
-
-* Additional visualizer styles
-* Expanded navigation experience
-* Tablet-specific layouts
-* Accessibility improvements
+* Additional activity integrations
+* UI refinements
+* Animation improvements
 * Performance optimizations
+* Synchronization improvements
 
-## 🤝 Contributing
+---
 
-Contributions, suggestions and bug reports are welcome.
+## Inspiration
 
-Feel free to open an issue or submit a pull request.
+Nova Bar was inspired by modern live activity systems and Samsung's Now Bar experience while being designed specifically for broader Android compatibility.
 
+---
+## License
 
+Nova Bar is licensed under the MIT License.
 
-Inspired by modern live activity systems and Samsung's contextual design philosophy.
+You are free to use, modify, distribute, and fork this project in accordance with the terms of the license.
+
+See the [LICENSE](LICENSE) file for full details.
+
