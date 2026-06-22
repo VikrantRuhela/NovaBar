@@ -25,7 +25,8 @@ data class TimerState(
     val hasPause: Boolean = false,
     val hasResume: Boolean = false,
     val hasReset: Boolean = false,
-    val targetEndElapsedRealtime: Long = 0L
+    val targetEndElapsedRealtime: Long = 0L,
+    val showSeconds: Boolean = false
 )
 
 data class StopwatchState(
@@ -34,7 +35,8 @@ data class StopwatchState(
     val hasPause: Boolean = false,
     val hasResume: Boolean = false,
     val hasLap: Boolean = false,
-    val startElapsedRealtime: Long = 0L
+    val startElapsedRealtime: Long = 0L,
+    val showSeconds: Boolean = false
 )
 
 

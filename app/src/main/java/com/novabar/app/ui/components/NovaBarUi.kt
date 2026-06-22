@@ -197,7 +197,11 @@ fun NovaBarUi() {
     val settings by viewModel.settingsFlow.collectAsState()
     val isDarkBg by viewModel.isDarkBackground.collectAsState()
     val isExpanded by OverlayStateManager.isExpanded.collectAsState()
-    val activeList by OverlayStateManager.activeActivities.collectAsState()
+    val activeList by remember {
+        OverlayStateManager.activeActivities.map { list ->
+            list.map { it::class.java.simpleName }
+        }.distinctUntilChanged()
+    }.collectAsState(initial = emptyList())
 
     LaunchedEffect(isExpanded) {
         if (isExpanded && activeStateKey == "Media") {
@@ -1171,39 +1175,15 @@ fun NotificationView(
 // --- TIMER VIEW ---
 @Composable
 fun TimerDisplayText(
-    targetEndElapsedRealtime: Long,
     remainingMs: Long,
-    isRunning: Boolean,
     showSeconds: Boolean,
     color: Color,
     fontSize: TextUnit,
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
-    var liveRemaining by remember(targetEndElapsedRealtime, remainingMs, isRunning) {
-        mutableStateOf(
-            if (isRunning && targetEndElapsedRealtime > 0) {
-                (targetEndElapsedRealtime - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-            } else {
-                remainingMs
-            }
-        )
-    }
-
-    LaunchedEffect(targetEndElapsedRealtime, remainingMs, isRunning) {
-        if (isRunning && targetEndElapsedRealtime > 0) {
-            while (liveRemaining > 0) {
-                val current = android.os.SystemClock.elapsedRealtime()
-                liveRemaining = (targetEndElapsedRealtime - current).coerceAtLeast(0L)
-                delay(10L)
-            }
-        } else {
-            liveRemaining = remainingMs
-        }
-    }
-
     Text(
-        text = formatDuration(liveRemaining, showSeconds),
+        text = formatDuration(remainingMs, showSeconds),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
@@ -1239,9 +1219,7 @@ fun TimerView(
             ) {
                 Text("⏱", color = color, fontSize = (11f + sizeOffset).sp)
                 TimerDisplayText(
-                    targetEndElapsedRealtime = state.targetEndElapsedRealtime,
                     remainingMs = state.remainingMs,
-                    isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
                     fontSize = (11f + sizeOffset).sp,
@@ -1268,9 +1246,7 @@ fun TimerView(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     TimerDisplayText(
-                        targetEndElapsedRealtime = state.targetEndElapsedRealtime,
                         remainingMs = state.remainingMs,
-                        isRunning = state.isRunning,
                         showSeconds = showSeconds,
                         color = color.copy(alpha = 0.8f),
                         fontSize = (11f + sizeOffset).sp,
@@ -1310,9 +1286,7 @@ fun TimerView(
                 }
                 
                 TimerDisplayText(
-                    targetEndElapsedRealtime = state.targetEndElapsedRealtime,
                     remainingMs = state.remainingMs,
-                    isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
                     fontSize = (26f + sizeOffset).sp,
@@ -1419,39 +1393,15 @@ fun formatDuration(ms: Long, showSeconds: Boolean): String {
 // --- STOPWATCH VIEW ---
 @Composable
 fun StopwatchDisplayText(
-    startElapsedRealtime: Long,
     elapsedMs: Long,
-    isRunning: Boolean,
     showSeconds: Boolean,
     color: Color,
     fontSize: TextUnit,
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
-    var liveElapsed by remember(startElapsedRealtime, elapsedMs, isRunning) {
-        mutableStateOf(
-            if (isRunning && startElapsedRealtime > 0) {
-                (android.os.SystemClock.elapsedRealtime() - startElapsedRealtime).coerceAtLeast(0L)
-            } else {
-                elapsedMs
-            }
-        )
-    }
-
-    LaunchedEffect(startElapsedRealtime, elapsedMs, isRunning) {
-        if (isRunning && startElapsedRealtime > 0) {
-            while (true) {
-                val current = android.os.SystemClock.elapsedRealtime()
-                liveElapsed = (current - startElapsedRealtime).coerceAtLeast(0L)
-                delay(33L)
-            }
-        } else {
-            liveElapsed = elapsedMs
-        }
-    }
-
     Text(
-        text = formatStopwatch(liveElapsed, showSeconds),
+        text = formatStopwatch(elapsedMs, showSeconds),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
@@ -1487,9 +1437,7 @@ fun StopwatchView(
             ) {
                 Text("⏲", color = color, fontSize = (11f + sizeOffset).sp)
                 StopwatchDisplayText(
-                    startElapsedRealtime = state.startElapsedRealtime,
                     elapsedMs = state.elapsedMs,
-                    isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
                     fontSize = (11f + sizeOffset).sp,
@@ -1516,9 +1464,7 @@ fun StopwatchView(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     StopwatchDisplayText(
-                        startElapsedRealtime = state.startElapsedRealtime,
                         elapsedMs = state.elapsedMs,
-                        isRunning = state.isRunning,
                         showSeconds = showSeconds,
                         color = color.copy(alpha = 0.8f),
                         fontSize = (11f + sizeOffset).sp,
@@ -1558,9 +1504,7 @@ fun StopwatchView(
                 }
                 
                 StopwatchDisplayText(
-                    startElapsedRealtime = state.startElapsedRealtime,
                     elapsedMs = state.elapsedMs,
-                    isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
                     fontSize = (26f + sizeOffset).sp,

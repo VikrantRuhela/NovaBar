@@ -267,4 +267,79 @@ object OverlayStateManager {
             false
         }
     }
+
+    private var stopwatchTickJob: Job? = null
+    private var timerTickJob: Job? = null
+
+    fun setStopwatchState(state: StopwatchState?) {
+        stopwatchState.value = state
+        if (state != null && state.isRunning && state.startElapsedRealtime > 0L) {
+            startStopwatchTicking()
+        } else {
+            stopwatchTickJob?.cancel()
+            stopwatchTickJob = null
+        }
+    }
+
+    fun setTimerState(state: TimerState?) {
+        timerState.value = state
+        if (state != null && state.isRunning && state.targetEndElapsedRealtime > 0L) {
+            startTimerTicking()
+        } else {
+            timerTickJob?.cancel()
+            timerTickJob = null
+        }
+    }
+
+    private fun startStopwatchTicking() {
+        if (stopwatchTickJob != null) return
+        stopwatchTickJob = scope.launch {
+            var lastElapsedCoarse = -1L
+            while (isActive) {
+                val current = stopwatchState.value
+                if (current == null || !current.isRunning || current.startElapsedRealtime <= 0L) {
+                    break
+                }
+                val now = android.os.SystemClock.elapsedRealtime()
+                val liveElapsed = (now - current.startElapsedRealtime).coerceAtLeast(0L)
+                val elapsedCoarse = liveElapsed / 10
+                if (elapsedCoarse != lastElapsedCoarse) {
+                    lastElapsedCoarse = elapsedCoarse
+                    stopwatchState.value = current.copy(elapsedMs = liveElapsed)
+                }
+                delay(33L)
+            }
+            stopwatchTickJob = null
+        }
+    }
+
+    private fun startTimerTicking() {
+        if (timerTickJob != null) return
+        timerTickJob = scope.launch {
+            var lastRemainingCoarse = -1L
+            while (isActive) {
+                val current = timerState.value
+                if (current == null || !current.isRunning || current.targetEndElapsedRealtime <= 0L) {
+                    break
+                }
+                val now = android.os.SystemClock.elapsedRealtime()
+                val liveRemaining = (current.targetEndElapsedRealtime - now).coerceAtLeast(0L)
+                val remainingCoarse = if (current.showSeconds) {
+                    liveRemaining / 10
+                } else {
+                    liveRemaining / 1000
+                }
+                if (remainingCoarse != lastRemainingCoarse) {
+                    lastRemainingCoarse = remainingCoarse
+                    timerState.value = current.copy(remainingMs = liveRemaining)
+                }
+                if (liveRemaining <= 0L) {
+                    break
+                }
+                val delayMs = if (current.showSeconds) 100L else 200L
+                delay(delayMs)
+            }
+            timerTickJob = null
+        }
+    }
 }

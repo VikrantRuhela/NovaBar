@@ -104,11 +104,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     } else {
                         current.remainingMs
                     }
-                    OverlayStateManager.timerState.value = current.copy(
+                    OverlayStateManager.setTimerState(current.copy(
                         isRunning = false,
                         remainingMs = liveRemaining,
                         targetEndElapsedRealtime = 0L
-                    )
+                    ))
                 }
             }
         }
@@ -123,10 +123,10 @@ class NovaNotificationListener : NotificationListenerService() {
                     } else {
                         current.remainingMs
                     }
-                    OverlayStateManager.timerState.value = current.copy(
+                    OverlayStateManager.setTimerState(current.copy(
                         isRunning = true,
                         targetEndElapsedRealtime = android.os.SystemClock.elapsedRealtime() + liveRemaining
-                    )
+                    ))
                 }
             }
         }
@@ -136,11 +136,11 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 val current = OverlayStateManager.timerState.value
                 if (current != null) {
-                    OverlayStateManager.timerState.value = current.copy(
+                    OverlayStateManager.setTimerState(current.copy(
                         isRunning = false,
                         remainingMs = current.durationMs,
                         targetEndElapsedRealtime = 0L
-                    )
+                    ))
                 }
             }
         }
@@ -155,11 +155,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     } else {
                         current.elapsedMs
                     }
-                    OverlayStateManager.stopwatchState.value = current.copy(
+                    OverlayStateManager.setStopwatchState(current.copy(
                         isRunning = false,
                         elapsedMs = liveElapsed,
                         startElapsedRealtime = 0L
-                    )
+                    ))
                 }
             }
         }
@@ -174,10 +174,10 @@ class NovaNotificationListener : NotificationListenerService() {
                     } else {
                         current.elapsedMs
                     }
-                    OverlayStateManager.stopwatchState.value = current.copy(
+                    OverlayStateManager.setStopwatchState(current.copy(
                         isRunning = true,
                         startElapsedRealtime = android.os.SystemClock.elapsedRealtime() - liveElapsed
-                    )
+                    ))
                 }
             }
         }
@@ -745,14 +745,15 @@ class NovaNotificationListener : NotificationListenerService() {
                         } else {
                             0L
                         }
-                        OverlayStateManager.stopwatchState.value = StopwatchState(
+                        OverlayStateManager.setStopwatchState(StopwatchState(
                             isRunning = isRunning,
                             elapsedMs = elapsedMs,
                             hasPause = hasPause,
                             hasResume = hasResume,
                             hasLap = hasLap,
-                            startElapsedRealtime = startElapsedRealtime
-                        )
+                            startElapsedRealtime = startElapsedRealtime,
+                            showSeconds = settings.showSeconds
+                        ))
                         return@launch
                     } else if (isTimer && settings.timerEnabled) {
                         activeTimerSbn = sbn
@@ -787,7 +788,7 @@ class NovaNotificationListener : NotificationListenerService() {
                             0L
                         }
 
-                        OverlayStateManager.timerState.value = TimerState(
+                        OverlayStateManager.setTimerState(TimerState(
                             isRunning = isRunning,
                             durationMs = durationMs,
                             remainingMs = remainingMs,
@@ -795,8 +796,9 @@ class NovaNotificationListener : NotificationListenerService() {
                             hasPause = hasPause,
                             hasResume = hasResume,
                             hasReset = hasReset,
-                            targetEndElapsedRealtime = targetEndElapsedRealtime
-                        )
+                            targetEndElapsedRealtime = targetEndElapsedRealtime,
+                            showSeconds = settings.showSeconds
+                        ))
                         return@launch
                     }
                 }
@@ -896,11 +898,11 @@ class NovaNotificationListener : NotificationListenerService() {
                 if (isClock) {
                     if (activeTimerSbn?.key == sbn.key) {
                         activeTimerSbn = null
-                        OverlayStateManager.timerState.value = null
+                        OverlayStateManager.setTimerState(null)
                     }
                     if (activeStopwatchSbn?.key == sbn.key) {
                         activeStopwatchSbn = null
-                        OverlayStateManager.stopwatchState.value = null
+                        OverlayStateManager.setStopwatchState(null)
                     }
                 }
                 val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
