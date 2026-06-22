@@ -308,10 +308,10 @@ Nova Bar was inspired by modern live activity systems and Samsung's Now Bar expe
 ### Expanded Music Panel
 ![media__1782139962442.jpg](assets/media__1782139962442.jpg)
 
-### Stopwatch
+### Stopwatch Pill
 ![media__1782139966952.jpg](assets/media__1782139966952.jpg)
 
-### media__1782140566611.jpg
+### App UI
 ![media__1782140566611.jpg](assets/media__1782140566611.jpg)
 
 ---
