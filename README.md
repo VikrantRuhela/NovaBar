@@ -296,19 +296,19 @@ Nova Bar was inspired by modern live activity systems and Samsung's Now Bar expe
 
 ## Previews
 
-### media__1782139962171.jpg
+### Charging Pill
 ![media__1782139962171.jpg](assets/media__1782139962171.jpg)
 
-### media__1782139962319.jpg
+### Notification Pill
 ![media__1782139962319.jpg](assets/media__1782139962319.jpg)
 
-### media__1782139962437.jpg
+### Music Pill
 ![media__1782139962437.jpg](assets/media__1782139962437.jpg)
 
-### media__1782139962442.jpg
+### Expanded Music Panel
 ![media__1782139962442.jpg](assets/media__1782139962442.jpg)
 
-### media__1782139966952.jpg
+### Stopwatch
 ![media__1782139966952.jpg](assets/media__1782139966952.jpg)
 
 ---
