@@ -99,7 +99,16 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 val current = OverlayStateManager.timerState.value
                 if (current != null) {
-                    OverlayStateManager.timerState.value = current.copy(isRunning = false)
+                    val liveRemaining = if (current.isRunning) {
+                        (current.targetEndElapsedRealtime - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                    } else {
+                        current.remainingMs
+                    }
+                    OverlayStateManager.timerState.value = current.copy(
+                        isRunning = false,
+                        remainingMs = liveRemaining,
+                        targetEndElapsedRealtime = 0L
+                    )
                 }
             }
         }
@@ -109,7 +118,15 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 val current = OverlayStateManager.timerState.value
                 if (current != null) {
-                    OverlayStateManager.timerState.value = current.copy(isRunning = true)
+                    val liveRemaining = if (current.isRunning) {
+                        (current.targetEndElapsedRealtime - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                    } else {
+                        current.remainingMs
+                    }
+                    OverlayStateManager.timerState.value = current.copy(
+                        isRunning = true,
+                        targetEndElapsedRealtime = android.os.SystemClock.elapsedRealtime() + liveRemaining
+                    )
                 }
             }
         }
@@ -119,7 +136,11 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 val current = OverlayStateManager.timerState.value
                 if (current != null) {
-                    OverlayStateManager.timerState.value = current.copy(isRunning = false, remainingMs = current.durationMs)
+                    OverlayStateManager.timerState.value = current.copy(
+                        isRunning = false,
+                        remainingMs = current.durationMs,
+                        targetEndElapsedRealtime = 0L
+                    )
                 }
             }
         }
@@ -129,7 +150,16 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 val current = OverlayStateManager.stopwatchState.value
                 if (current != null) {
-                    OverlayStateManager.stopwatchState.value = current.copy(isRunning = false)
+                    val liveElapsed = if (current.isRunning) {
+                        (android.os.SystemClock.elapsedRealtime() - current.startElapsedRealtime).coerceAtLeast(0L)
+                    } else {
+                        current.elapsedMs
+                    }
+                    OverlayStateManager.stopwatchState.value = current.copy(
+                        isRunning = false,
+                        elapsedMs = liveElapsed,
+                        startElapsedRealtime = 0L
+                    )
                 }
             }
         }
@@ -139,7 +169,15 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 val current = OverlayStateManager.stopwatchState.value
                 if (current != null) {
-                    OverlayStateManager.stopwatchState.value = current.copy(isRunning = true)
+                    val liveElapsed = if (current.isRunning) {
+                        (android.os.SystemClock.elapsedRealtime() - current.startElapsedRealtime).coerceAtLeast(0L)
+                    } else {
+                        current.elapsedMs
+                    }
+                    OverlayStateManager.stopwatchState.value = current.copy(
+                        isRunning = true,
+                        startElapsedRealtime = android.os.SystemClock.elapsedRealtime() - liveElapsed
+                    )
                 }
             }
         }
@@ -691,22 +729,21 @@ class NovaNotificationListener : NotificationListenerService() {
                         val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
 
                         val postTime = sbn.postTime
-                        val baseTime: Long
-                        val baseElapsedMs: Long
-                        val elapsedMs: Long
+                        var elapsedMs = 0L
                         if (showChronometer && whenTime > 0) {
-                            baseElapsedMs = 0L
-                            baseTime = whenTime
                             elapsedMs = System.currentTimeMillis() - whenTime
                         } else {
                             val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
-                            baseElapsedMs = parsed
-                            baseTime = if (postTime > 0) postTime else System.currentTimeMillis()
                             elapsedMs = if (isRunning && parsed > 0 && postTime > 0) {
                                 parsed + (System.currentTimeMillis() - postTime)
                             } else {
                                 parsed
                             }
+                        }
+                        val startElapsedRealtime = if (isRunning) {
+                            android.os.SystemClock.elapsedRealtime() - elapsedMs
+                        } else {
+                            0L
                         }
                         OverlayStateManager.stopwatchState.value = StopwatchState(
                             isRunning = isRunning,
@@ -714,8 +751,7 @@ class NovaNotificationListener : NotificationListenerService() {
                             hasPause = hasPause,
                             hasResume = hasResume,
                             hasLap = hasLap,
-                            baseTime = baseTime,
-                            baseElapsedMs = baseElapsedMs
+                            startElapsedRealtime = startElapsedRealtime
                         )
                         return@launch
                     } else if (isTimer && settings.timerEnabled) {
@@ -727,22 +763,21 @@ class NovaNotificationListener : NotificationListenerService() {
                         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
 
                         val postTime = sbn.postTime
-                        val baseTime: Long
-                        val baseRemainingMs: Long
-                        val remainingMs: Long
+                        var remainingMs = 0L
                         if (showChronometer && whenTime > 0) {
-                            baseTime = if (postTime > 0) postTime else System.currentTimeMillis()
-                            baseRemainingMs = (whenTime - baseTime).coerceAtLeast(0L)
-                            remainingMs = (whenTime - System.currentTimeMillis()).coerceAtLeast(0L)
+                            remainingMs = whenTime - System.currentTimeMillis()
                         } else {
                             val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
-                            baseRemainingMs = parsed
-                            baseTime = if (postTime > 0) postTime else System.currentTimeMillis()
                             remainingMs = if (isRunning && parsed > 0 && postTime > 0) {
                                 (parsed - (System.currentTimeMillis() - postTime)).coerceAtLeast(0L)
                             } else {
                                 parsed
                             }
+                        }
+                        val targetEndElapsedRealtime = if (isRunning) {
+                            android.os.SystemClock.elapsedRealtime() + remainingMs
+                        } else {
+                            0L
                         }
                         
                         val currentTimer = OverlayStateManager.timerState.value
@@ -755,13 +790,12 @@ class NovaNotificationListener : NotificationListenerService() {
                         OverlayStateManager.timerState.value = TimerState(
                             isRunning = isRunning,
                             durationMs = durationMs,
-                            remainingMs = if (remainingMs > 0) remainingMs else 0L,
+                            remainingMs = remainingMs,
                             label = if (title.lowercase().contains("timer")) text else title,
                             hasPause = hasPause,
                             hasResume = hasResume,
                             hasReset = hasReset,
-                            baseTime = baseTime,
-                            baseRemainingMs = baseRemainingMs
+                            targetEndElapsedRealtime = targetEndElapsedRealtime
                         )
                         return@launch
                     }

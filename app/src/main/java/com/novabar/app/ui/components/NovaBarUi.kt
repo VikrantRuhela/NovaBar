@@ -1171,8 +1171,8 @@ fun NotificationView(
 // --- TIMER VIEW ---
 @Composable
 fun TimerDisplayText(
-    baseRemainingMs: Long,
-    baseTime: Long,
+    targetEndElapsedRealtime: Long,
+    remainingMs: Long,
     isRunning: Boolean,
     showSeconds: Boolean,
     color: Color,
@@ -1180,30 +1180,30 @@ fun TimerDisplayText(
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
-    var remainingMs by remember(baseRemainingMs, baseTime, isRunning) {
+    var liveRemaining by remember(targetEndElapsedRealtime, remainingMs, isRunning) {
         mutableStateOf(
-            if (isRunning && baseTime > 0) {
-                (baseRemainingMs - (System.currentTimeMillis() - baseTime)).coerceAtLeast(0L)
+            if (isRunning && targetEndElapsedRealtime > 0) {
+                (targetEndElapsedRealtime - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
             } else {
-                baseRemainingMs
+                remainingMs
             }
         )
     }
 
-    LaunchedEffect(baseRemainingMs, baseTime, isRunning) {
-        if (isRunning && baseTime > 0) {
-            while (remainingMs > 0) {
-                val current = System.currentTimeMillis()
-                remainingMs = (baseRemainingMs - (current - baseTime)).coerceAtLeast(0L)
+    LaunchedEffect(targetEndElapsedRealtime, remainingMs, isRunning) {
+        if (isRunning && targetEndElapsedRealtime > 0) {
+            while (liveRemaining > 0) {
+                val current = android.os.SystemClock.elapsedRealtime()
+                liveRemaining = (targetEndElapsedRealtime - current).coerceAtLeast(0L)
                 delay(10L)
             }
         } else {
-            remainingMs = baseRemainingMs
+            liveRemaining = remainingMs
         }
     }
 
     Text(
-        text = formatDuration(remainingMs, showSeconds),
+        text = formatDuration(liveRemaining, showSeconds),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
@@ -1239,8 +1239,8 @@ fun TimerView(
             ) {
                 Text("⏱", color = color, fontSize = (11f + sizeOffset).sp)
                 TimerDisplayText(
-                    baseRemainingMs = state.baseRemainingMs,
-                    baseTime = state.baseTime,
+                    targetEndElapsedRealtime = state.targetEndElapsedRealtime,
+                    remainingMs = state.remainingMs,
                     isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
@@ -1268,8 +1268,8 @@ fun TimerView(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     TimerDisplayText(
-                        baseRemainingMs = state.baseRemainingMs,
-                        baseTime = state.baseTime,
+                        targetEndElapsedRealtime = state.targetEndElapsedRealtime,
+                        remainingMs = state.remainingMs,
                         isRunning = state.isRunning,
                         showSeconds = showSeconds,
                         color = color.copy(alpha = 0.8f),
@@ -1310,8 +1310,8 @@ fun TimerView(
                 }
                 
                 TimerDisplayText(
-                    baseRemainingMs = state.baseRemainingMs,
-                    baseTime = state.baseTime,
+                    targetEndElapsedRealtime = state.targetEndElapsedRealtime,
+                    remainingMs = state.remainingMs,
                     isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
@@ -1419,8 +1419,8 @@ fun formatDuration(ms: Long, showSeconds: Boolean): String {
 // --- STOPWATCH VIEW ---
 @Composable
 fun StopwatchDisplayText(
-    baseElapsedMs: Long,
-    baseTime: Long,
+    startElapsedRealtime: Long,
+    elapsedMs: Long,
     isRunning: Boolean,
     showSeconds: Boolean,
     color: Color,
@@ -1428,30 +1428,30 @@ fun StopwatchDisplayText(
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
-    var elapsedMs by remember(baseElapsedMs, baseTime, isRunning) {
+    var liveElapsed by remember(startElapsedRealtime, elapsedMs, isRunning) {
         mutableStateOf(
-            if (isRunning && baseTime > 0) {
-                baseElapsedMs + (System.currentTimeMillis() - baseTime)
+            if (isRunning && startElapsedRealtime > 0) {
+                (android.os.SystemClock.elapsedRealtime() - startElapsedRealtime).coerceAtLeast(0L)
             } else {
-                baseElapsedMs
+                elapsedMs
             }
         )
     }
 
-    LaunchedEffect(baseElapsedMs, baseTime, isRunning) {
-        if (isRunning && baseTime > 0) {
+    LaunchedEffect(startElapsedRealtime, elapsedMs, isRunning) {
+        if (isRunning && startElapsedRealtime > 0) {
             while (true) {
-                val current = System.currentTimeMillis()
-                elapsedMs = baseElapsedMs + (current - baseTime)
+                val current = android.os.SystemClock.elapsedRealtime()
+                liveElapsed = (current - startElapsedRealtime).coerceAtLeast(0L)
                 delay(33L)
             }
         } else {
-            elapsedMs = baseElapsedMs
+            liveElapsed = elapsedMs
         }
     }
 
     Text(
-        text = formatStopwatch(elapsedMs, showSeconds),
+        text = formatStopwatch(liveElapsed, showSeconds),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
@@ -1487,8 +1487,8 @@ fun StopwatchView(
             ) {
                 Text("⏲", color = color, fontSize = (11f + sizeOffset).sp)
                 StopwatchDisplayText(
-                    baseElapsedMs = state.baseElapsedMs,
-                    baseTime = state.baseTime,
+                    startElapsedRealtime = state.startElapsedRealtime,
+                    elapsedMs = state.elapsedMs,
                     isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
@@ -1516,8 +1516,8 @@ fun StopwatchView(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     StopwatchDisplayText(
-                        baseElapsedMs = state.baseElapsedMs,
-                        baseTime = state.baseTime,
+                        startElapsedRealtime = state.startElapsedRealtime,
+                        elapsedMs = state.elapsedMs,
                         isRunning = state.isRunning,
                         showSeconds = showSeconds,
                         color = color.copy(alpha = 0.8f),
@@ -1558,8 +1558,8 @@ fun StopwatchView(
                 }
                 
                 StopwatchDisplayText(
-                    baseElapsedMs = state.baseElapsedMs,
-                    baseTime = state.baseTime,
+                    startElapsedRealtime = state.startElapsedRealtime,
+                    elapsedMs = state.elapsedMs,
                     isRunning = state.isRunning,
                     showSeconds = showSeconds,
                     color = color,
