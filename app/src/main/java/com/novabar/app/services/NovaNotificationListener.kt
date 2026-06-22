@@ -691,11 +691,17 @@ class NovaNotificationListener : NotificationListenerService() {
                         val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
 
                         val postTime = sbn.postTime
-                        var elapsedMs = 0L
+                        val baseTime: Long
+                        val baseElapsedMs: Long
+                        val elapsedMs: Long
                         if (showChronometer && whenTime > 0) {
+                            baseElapsedMs = 0L
+                            baseTime = whenTime
                             elapsedMs = System.currentTimeMillis() - whenTime
                         } else {
                             val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                            baseElapsedMs = parsed
+                            baseTime = if (postTime > 0) postTime else System.currentTimeMillis()
                             elapsedMs = if (isRunning && parsed > 0 && postTime > 0) {
                                 parsed + (System.currentTimeMillis() - postTime)
                             } else {
@@ -707,7 +713,9 @@ class NovaNotificationListener : NotificationListenerService() {
                             elapsedMs = elapsedMs,
                             hasPause = hasPause,
                             hasResume = hasResume,
-                            hasLap = hasLap
+                            hasLap = hasLap,
+                            baseTime = baseTime,
+                            baseElapsedMs = baseElapsedMs
                         )
                         return@launch
                     } else if (isTimer && settings.timerEnabled) {
@@ -719,11 +727,17 @@ class NovaNotificationListener : NotificationListenerService() {
                         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
 
                         val postTime = sbn.postTime
-                        var remainingMs = 0L
+                        val baseTime: Long
+                        val baseRemainingMs: Long
+                        val remainingMs: Long
                         if (showChronometer && whenTime > 0) {
-                            remainingMs = whenTime - System.currentTimeMillis()
+                            baseTime = if (postTime > 0) postTime else System.currentTimeMillis()
+                            baseRemainingMs = (whenTime - baseTime).coerceAtLeast(0L)
+                            remainingMs = (whenTime - System.currentTimeMillis()).coerceAtLeast(0L)
                         } else {
                             val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                            baseRemainingMs = parsed
+                            baseTime = if (postTime > 0) postTime else System.currentTimeMillis()
                             remainingMs = if (isRunning && parsed > 0 && postTime > 0) {
                                 (parsed - (System.currentTimeMillis() - postTime)).coerceAtLeast(0L)
                             } else {
@@ -745,7 +759,9 @@ class NovaNotificationListener : NotificationListenerService() {
                             label = if (title.lowercase().contains("timer")) text else title,
                             hasPause = hasPause,
                             hasResume = hasResume,
-                            hasReset = hasReset
+                            hasReset = hasReset,
+                            baseTime = baseTime,
+                            baseRemainingMs = baseRemainingMs
                         )
                         return@launch
                     }
