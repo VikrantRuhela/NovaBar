@@ -1,3 +1,5 @@
+![Nova Bar](assets/banner.png)
+
 # Nova Bar
 
 Modern live activities for Android.
