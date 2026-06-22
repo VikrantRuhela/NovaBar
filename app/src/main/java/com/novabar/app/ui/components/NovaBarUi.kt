@@ -1593,10 +1593,18 @@ fun formatStopwatch(ms: Long, showSeconds: Boolean): String {
     val seconds = (ms % 60000) / 1000
     val centiseconds = (ms % 1000) / 10
     
-    return if (hours > 0) {
-        String.format("%02d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
+    return if (showSeconds) {
+        if (hours > 0) {
+            String.format("%02d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
+        } else {
+            String.format("%02d:%02d.%02d", minutes, seconds, centiseconds)
+        }
     } else {
-        String.format("%02d:%02d.%02d", minutes, seconds, centiseconds)
+        if (hours > 0) {
+            String.format("%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%02d:%02d", minutes, seconds)
+        }
     }
 }
 

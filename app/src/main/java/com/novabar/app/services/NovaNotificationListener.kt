@@ -307,25 +307,41 @@ class NovaNotificationListener : NotificationListenerService() {
             if (text.isEmpty()) return null
             val clean = text.trim()
             
-            // 1. Try to extract colon-separated time: hh:mm:ss or mm:ss anywhere in the string
-            val colonRegex = "(\\d{1,2}:\\d{2}(?::\\d{2})?)".toRegex()
+            // 1. Try to extract colon-separated time: hh:mm:ss.SS, mm:ss.SS, hh:mm:ss, mm:ss anywhere in the string
+            val colonRegex = "(?:\\b(\\d{1,2}):)?(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?".toRegex()
             val colonMatch = colonRegex.find(clean)
             if (colonMatch != null) {
-                val timeStr = colonMatch.groupValues[1]
-                val parts = timeStr.split(":")
                 try {
-                    var secs = 0L
-                    var mins = 0L
-                    var hrs = 0L
-                    if (parts.size == 2) {
-                        mins = parts[0].toLong()
-                        secs = parts[1].toLong()
-                    } else if (parts.size == 3) {
-                        hrs = parts[0].toLong()
-                        mins = parts[1].toLong()
-                        secs = parts[2].toLong()
+                    val p1 = colonMatch.groupValues[1]
+                    val p2 = colonMatch.groupValues[2]
+                    val p3 = colonMatch.groupValues[3]
+                    val p4 = colonMatch.groupValues[4]
+                    
+                    val hrs: Long
+                    val mins: Long
+                    val secs: Long
+                    var ms = 0L
+                    
+                    if (p1.isNotEmpty()) {
+                        hrs = p1.toLong()
+                        mins = p2.toLong()
+                        secs = p3.toLong()
+                    } else {
+                        hrs = 0L
+                        mins = p2.toLong()
+                        secs = p3.toLong()
                     }
-                    return (hrs * 3600 + mins * 60 + secs) * 1000L
+                    
+                    if (p4.isNotEmpty()) {
+                        ms = when (p4.length) {
+                            1 -> p4.toLong() * 100L
+                            2 -> p4.toLong() * 10L
+                            3 -> p4.toLong()
+                            else -> 0L
+                        }
+                    }
+                    
+                    return (hrs * 3600 + mins * 60 + secs) * 1000L + ms
                 } catch (e: Exception) {
                     // Ignore and try next method
                 }
@@ -341,14 +357,37 @@ class NovaNotificationListener : NotificationListenerService() {
                     val value = match.groupValues[1].toDouble()
                     val unit = match.groupValues[2]
                     when (unit) {
-                        "h" -> { totalMs += (value * 3600000L).toLong(); found = true }
-                        "m" -> { totalMs += (value * 60000L).toLong(); found = true }
-                        "s" -> { totalMs += (value * 1000L).toLong(); found = true }
+                        "h" -> { totalMs += kotlin.math.floor(value * 3600000.0).toLong(); found = true }
+                        "m" -> { totalMs += kotlin.math.floor(value * 60000.0).toLong(); found = true }
+                        "s" -> { totalMs += kotlin.math.floor(value * 1000.0).toLong(); found = true }
                     }
                 }
                 if (found) return totalMs
             } catch (e: Exception) {
                 // Ignore
+            }
+
+            // 3. Try pure decimal or integer seconds: e.g. "13.42" or "13"
+            val decimalSecRegex = "^\\s*(\\d+)(?:\\.(\\d{1,3}))?\\s*$".toRegex()
+            val decimalSecMatch = decimalSecRegex.find(clean)
+            if (decimalSecMatch != null) {
+                try {
+                    val p1 = decimalSecMatch.groupValues[1]
+                    val p2 = decimalSecMatch.groupValues[2]
+                    val secs = p1.toLong()
+                    var ms = 0L
+                    if (p2.isNotEmpty()) {
+                        ms = when (p2.length) {
+                            1 -> p2.toLong() * 100L
+                            2 -> p2.toLong() * 10L
+                            3 -> p2.toLong()
+                            else -> 0L
+                        }
+                    }
+                    return secs * 1000L + ms
+                } catch (e: Exception) {
+                    // Ignore
+                }
             }
             
             return null
@@ -728,17 +767,10 @@ class NovaNotificationListener : NotificationListenerService() {
                         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
                         val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
 
-                        val postTime = sbn.postTime
-                        var elapsedMs = 0L
-                        if (showChronometer && whenTime > 0) {
-                            elapsedMs = System.currentTimeMillis() - whenTime
+                        val elapsedMs = if (showChronometer && whenTime > 0) {
+                            System.currentTimeMillis() - whenTime
                         } else {
-                            val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
-                            elapsedMs = if (isRunning && parsed > 0 && postTime > 0) {
-                                parsed + (System.currentTimeMillis() - postTime)
-                            } else {
-                                parsed
-                            }
+                            parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
                         }
                         val startElapsedRealtime = if (isRunning) {
                             android.os.SystemClock.elapsedRealtime() - elapsedMs
@@ -763,17 +795,10 @@ class NovaNotificationListener : NotificationListenerService() {
                         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
                         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
 
-                        val postTime = sbn.postTime
-                        var remainingMs = 0L
-                        if (showChronometer && whenTime > 0) {
-                            remainingMs = whenTime - System.currentTimeMillis()
+                        val remainingMs = if (showChronometer && whenTime > 0) {
+                            whenTime - System.currentTimeMillis()
                         } else {
-                            val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
-                            remainingMs = if (isRunning && parsed > 0 && postTime > 0) {
-                                (parsed - (System.currentTimeMillis() - postTime)).coerceAtLeast(0L)
-                            } else {
-                                parsed
-                            }
+                            parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
                         }
                         val targetEndElapsedRealtime = if (isRunning) {
                             android.os.SystemClock.elapsedRealtime() + remainingMs
