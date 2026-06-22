@@ -2,6 +2,12 @@ package com.novabar.app.domain
 
 import android.graphics.Rect
 import android.util.Log
+import android.content.Context
+import android.telecom.TelecomManager
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.Manifest
+import com.novabar.app.services.NovaAccessibilityService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -30,9 +36,11 @@ object OverlayStateManager {
 
     // Global expanded state flow
     val isExpanded = MutableStateFlow(false)
+    val windowMode = MutableStateFlow("Compact")
 
     fun expand() {
         Log.d("NovaBar", "EXPAND_REQUEST")
+        windowMode.value = "Expanded"
         isExpanded.value = true
     }
 
@@ -44,10 +52,12 @@ object OverlayStateManager {
     fun toggleExpanded() {
         if (isExpanded.value) {
             Log.d("NovaBar", "COLLAPSE_REQUEST")
+            isExpanded.value = false
         } else {
             Log.d("NovaBar", "EXPAND_REQUEST")
+            windowMode.value = "Expanded"
+            isExpanded.value = true
         }
-        isExpanded.value = !isExpanded.value
     }
 
     fun updateCharging(state: ChargingState) {
@@ -195,6 +205,66 @@ object OverlayStateManager {
             activeState.collect { state ->
                 DiagnosticsManager.currentPresentationState.value = state::class.java.simpleName
             }
+        }
+    }
+
+    fun endCall(context: Context) {
+        Log.d("NovaBar", "CALL_END_BUTTON_CLICKED")
+        
+        // Primary path: TelecomManager.endCall()
+        val telecomSuccess = endCallTelecom(context)
+        if (telecomSuccess) {
+            Log.d("NovaBar", "CALL_END_TELECOM_SUCCESS")
+            phoneCallState.value = null
+            collapse()
+            return
+        }
+        
+        // Fallback path: Accessibility Service
+        Log.d("NovaBar", "Telecom endCall failed/denied, trying Accessibility fallback...")
+        val accessibilitySuccess = NovaAccessibilityService.triggerEndCall()
+        if (accessibilitySuccess) {
+            Log.d("NovaBar", "CALL_END_ACCESSIBILITY_SUCCESS")
+            phoneCallState.value = null
+            collapse()
+        } else {
+            Log.e("NovaBar", "CALL_END_ACCESSIBILITY_FAILED")
+        }
+    }
+
+    private fun endCallTelecom(context: Context): Boolean {
+        Log.d("NovaBar", "CALL_END_REQUEST_SENT")
+        
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
+            Log.w("NovaBar", "CALL_END_TELECOM_FAILED: ANSWER_PHONE_CALLS permission not granted")
+            return false
+        }
+        
+        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+        if (telecomManager == null) {
+            Log.e("NovaBar", "CALL_END_TELECOM_FAILED: TelecomManager system service not found")
+            return false
+        }
+        
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val success = telecomManager.endCall()
+                if (success) {
+                    true
+                } else {
+                    Log.e("NovaBar", "CALL_END_TELECOM_FAILED: TelecomManager.endCall() returned false")
+                    false
+                }
+            } else {
+                Log.e("NovaBar", "CALL_END_TELECOM_FAILED: API level < 28 (Pie)")
+                false
+            }
+        } catch (e: SecurityException) {
+            Log.e("NovaBar", "CALL_END_TELECOM_FAILED: SecurityException - ${e.message}")
+            false
+        } catch (e: Exception) {
+            Log.e("NovaBar", "CALL_END_TELECOM_FAILED: Exception - ${e.message}")
+            false
         }
     }
 }

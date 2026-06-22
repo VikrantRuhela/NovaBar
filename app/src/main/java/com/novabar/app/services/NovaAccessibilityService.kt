@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.Display
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.graphics.ColorUtils
 import com.novabar.app.data.SettingsRepository
 import com.novabar.app.data.NovaSettings
@@ -19,6 +20,22 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 
 class NovaAccessibilityService : AccessibilityService() {
+
+    companion object {
+        @Volatile
+        private var instance: NovaAccessibilityService? = null
+
+        fun getInstance(): NovaAccessibilityService? = instance
+
+        fun triggerEndCall(): Boolean {
+            val service = instance
+            if (service == null) {
+                Log.e("NovaBar", "CALL_END_ACCESSIBILITY_FAILED: NovaAccessibilityService instance is null")
+                return false
+            }
+            return service.triggerEndCallViaAccessibility()
+        }
+    }
 
     private val tag = "NovaAccessibilityService"
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
@@ -34,6 +51,7 @@ class NovaAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         DiagnosticsManager.overlayEngine.value = "ACCESSIBILITY"
         DiagnosticsManager.accessibilityServiceEnabled.value = true
         DiagnosticsManager.accessibilityOverlayActive.value = false
@@ -101,11 +119,71 @@ class NovaAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
         DiagnosticsManager.accessibilityServiceEnabled.value = false
         DiagnosticsManager.accessibilityOverlayActive.value = false
         settingsJob?.cancel()
         removeOverlay()
         scope.cancel()
+    }
+
+    fun triggerEndCallViaAccessibility(): Boolean {
+        Log.d("NovaBar", "CALL_END_REQUEST_SENT: Attempting Accessibility fallback")
+        val currentWindows = try { windows } catch (e: Exception) { emptyList() }
+        for (window in currentWindows) {
+            val root = try { window.root } catch (e: Exception) { null }
+            if (root != null) {
+                if (findAndPerformEndCallClick(root)) {
+                    root.recycle()
+                    Log.d("NovaBar", "CALL_END_ACCESSIBILITY_SUCCESS: Found and clicked end call button in windows list")
+                    return true
+                }
+                root.recycle()
+            }
+        }
+        val activeRoot = try { rootInActiveWindow } catch (e: Exception) { null }
+        if (activeRoot != null) {
+            val result = findAndPerformEndCallClick(activeRoot)
+            activeRoot.recycle()
+            if (result) {
+                Log.d("NovaBar", "CALL_END_ACCESSIBILITY_SUCCESS: Found and clicked end call button in active window")
+                return true
+            }
+        }
+        Log.e("NovaBar", "CALL_END_ACCESSIBILITY_FAILED: Could not find clickable End Call button in any window")
+        return false
+    }
+
+    private fun findAndPerformEndCallClick(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+
+        val text = node.text?.toString()?.lowercase() ?: ""
+        val desc = node.contentDescription?.toString()?.lowercase() ?: ""
+        val viewId = node.viewIdResourceName?.lowercase() ?: ""
+
+        val matchesText = text.contains("end call") || text.contains("hang up") || text.contains("hangup") || text.contains("decline") || text.contains("end")
+        val matchesDesc = desc.contains("end call") || desc.contains("hang up") || desc.contains("hangup") || desc.contains("decline") || desc.contains("end")
+        val matchesId = viewId.contains("end_call") || viewId.contains("endcall") || viewId.contains("decline") || viewId.contains("hangup") || viewId.contains("disconnect")
+
+        if ((matchesText || matchesDesc || matchesId) && node.isClickable) {
+            val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (success) {
+                Log.d("NovaBar", "Accessibility clicked: id=$viewId, text=$text, desc=$desc")
+                return true
+            }
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (findAndPerformEndCallClick(child)) {
+                child?.recycle()
+                return true
+            }
+            child?.recycle()
+        }
+        return false
     }
 
     private fun analyzeBackgroundLuminance() {

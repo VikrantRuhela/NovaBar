@@ -27,50 +27,159 @@ class NovaNotificationListener : NotificationListenerService() {
 
     companion object {
         private var activeController: MediaController? = null
+        private var activeTimerSbn: StatusBarNotification? = null
+        private var activeStopwatchSbn: StatusBarNotification? = null
 
         fun getActiveMediaController(): MediaController? = activeController
+        fun getActiveTimerSbn(): StatusBarNotification? = activeTimerSbn
+        fun getActiveStopwatchSbn(): StatusBarNotification? = activeStopwatchSbn
 
         fun play() {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_PLAY")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_PLAY")
             try {
                 activeController?.transportControls?.play()
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_PLAY")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to send play control", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_PLAY, error=${e.message}")
             }
         }
 
         fun pause() {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_PAUSE")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_PAUSE")
             try {
                 activeController?.transportControls?.pause()
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_PAUSE")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to send pause control", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_PAUSE, error=${e.message}")
             }
         }
 
         fun skipToNext() {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_NEXT")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_NEXT")
             try {
                 activeController?.transportControls?.skipToNext()
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_NEXT")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to send skipToNext control", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_NEXT, error=${e.message}")
             }
         }
 
         fun skipToPrevious() {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_PREVIOUS")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_PREVIOUS")
             try {
                 activeController?.transportControls?.skipToPrevious()
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_PREVIOUS")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to send skipToPrevious control", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_PREVIOUS, error=${e.message}")
             }
         }
 
         fun seekTo(posMs: Long) {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_SEEK")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_SEEK")
             try {
                 activeController?.transportControls?.seekTo(posMs)
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_SEEK")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to send seekTo control", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_SEEK, error=${e.message}")
             }
         }
 
+        fun pauseTimer() {
+            val success = triggerNotificationAction(activeTimerSbn, listOf("pause", "stop"), "TIMER_PAUSE")
+            if (success) {
+                val current = OverlayStateManager.timerState.value
+                if (current != null) {
+                    OverlayStateManager.timerState.value = current.copy(isRunning = false)
+                }
+            }
+        }
+
+        fun resumeTimer() {
+            val success = triggerNotificationAction(activeTimerSbn, listOf("resume", "continue", "start", "play"), "TIMER_RESUME")
+            if (success) {
+                val current = OverlayStateManager.timerState.value
+                if (current != null) {
+                    OverlayStateManager.timerState.value = current.copy(isRunning = true)
+                }
+            }
+        }
+
+        fun resetTimer() {
+            val success = triggerNotificationAction(activeTimerSbn, listOf("reset", "restart", "delete", "dismiss", "cancel"), "TIMER_RESET")
+            if (success) {
+                val current = OverlayStateManager.timerState.value
+                if (current != null) {
+                    OverlayStateManager.timerState.value = current.copy(isRunning = false, remainingMs = current.durationMs)
+                }
+            }
+        }
+
+        fun pauseStopwatch() {
+            val success = triggerNotificationAction(activeStopwatchSbn, listOf("pause", "stop"), "STOPWATCH_PAUSE")
+            if (success) {
+                val current = OverlayStateManager.stopwatchState.value
+                if (current != null) {
+                    OverlayStateManager.stopwatchState.value = current.copy(isRunning = false)
+                }
+            }
+        }
+
+        fun resumeStopwatch() {
+            val success = triggerNotificationAction(activeStopwatchSbn, listOf("resume", "continue", "start", "play"), "STOPWATCH_RESUME")
+            if (success) {
+                val current = OverlayStateManager.stopwatchState.value
+                if (current != null) {
+                    OverlayStateManager.stopwatchState.value = current.copy(isRunning = true)
+                }
+            }
+        }
+
+        fun lapStopwatch() {
+            triggerNotificationAction(activeStopwatchSbn, listOf("lap", "split"), "STOPWATCH_LAP")
+        }
+
+        private fun triggerNotificationAction(sbn: StatusBarNotification?, keywords: List<String>, buttonName: String): Boolean {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=$buttonName")
+            if (sbn == null) {
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=$buttonName, reason=No active notification")
+                return false
+            }
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=$buttonName")
+            val actions = sbn.notification.actions
+            if (actions == null) {
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=$buttonName, reason=Notification has no actions")
+                return false
+            }
+            for (action in actions) {
+                val title = action.title.toString().lowercase()
+                if (keywords.any { title.contains(it) }) {
+                    try {
+                        action.actionIntent.send()
+                        Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=$buttonName")
+                        return true
+                    } catch (e: Exception) {
+                        Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=$buttonName, error=${e.message}", e)
+                        return false
+                    }
+                }
+            }
+            Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=$buttonName, reason=No action matched keywords $keywords")
+            return false
+        }
+
         fun toggleShuffle() {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_SHUFFLE")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_SHUFFLE")
             try {
                 val controller = activeController ?: return
                 val extras = try { controller.extras } catch (e: Exception) { null }
@@ -81,12 +190,16 @@ class NovaNotificationListener : NotificationListenerService() {
                     putInt("android.support.v4.media.session.extra.SHUFFLE_MODE", newMode)
                 }
                 controller.sendCommand("android.support.v4.media.session.command.SET_SHUFFLE_MODE", bundle, null)
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_SHUFFLE")
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to toggle shuffle", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_SHUFFLE, error=${e.message}")
             }
         }
 
         fun showOutputSwitcher(context: Context) {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_OUTPUT_SWITCHER")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_OUTPUT_SWITCHER")
             try {
                 val controller = activeController ?: return
                 val packageName = controller.packageName
@@ -96,14 +209,34 @@ class NovaNotificationListener : NotificationListenerService() {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)
+                    Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_OUTPUT_SWITCHER")
                 } else {
                     val intent = Intent(android.provider.Settings.ACTION_SOUND_SETTINGS).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)
+                    Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_OUTPUT_SWITCHER")
                 }
             } catch (e: Exception) {
                 Log.e("NovaNotificationListener", "Failed to show output switcher", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_OUTPUT_SWITCHER, error=${e.message}")
+            }
+        }
+
+        fun adjustVolume(context: Context) {
+            Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_VOLUME")
+            Log.d("NovaBar", "BUTTON_ACTION_STARTED: button=MEDIA_VOLUME")
+            try {
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                audioManager.adjustStreamVolume(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    android.media.AudioManager.ADJUST_SAME,
+                    android.media.AudioManager.FLAG_SHOW_UI
+                )
+                Log.d("NovaBar", "BUTTON_ACTION_SUCCESS: button=MEDIA_VOLUME")
+            } catch (e: Exception) {
+                Log.e("NovaNotificationListener", "Failed to adjust volume / show UI", e)
+                Log.e("NovaBar", "BUTTON_ACTION_FAILED: button=MEDIA_VOLUME, error=${e.message}")
             }
         }
 
@@ -136,40 +269,43 @@ class NovaNotificationListener : NotificationListenerService() {
             if (text.isEmpty()) return null
             val clean = text.trim()
             
-            val parts = clean.split(":")
-            if (parts.size in 2..3) {
+            // 1. Try to extract colon-separated time: hh:mm:ss or mm:ss anywhere in the string
+            val colonRegex = "(\\d{1,2}:\\d{2}(?::\\d{2})?)".toRegex()
+            val colonMatch = colonRegex.find(clean)
+            if (colonMatch != null) {
+                val timeStr = colonMatch.groupValues[1]
+                val parts = timeStr.split(":")
                 try {
                     var secs = 0L
                     var mins = 0L
                     var hrs = 0L
                     if (parts.size == 2) {
                         mins = parts[0].toLong()
-                        val secPart = parts[1].split(".")[0]
-                        secs = secPart.toLong()
-                    } else {
+                        secs = parts[1].toLong()
+                    } else if (parts.size == 3) {
                         hrs = parts[0].toLong()
                         mins = parts[1].toLong()
-                        val secPart = parts[2].split(".")[0]
-                        secs = secPart.toLong()
+                        secs = parts[2].toLong()
                     }
                     return (hrs * 3600 + mins * 60 + secs) * 1000L
                 } catch (e: Exception) {
-                    // Ignore
+                    // Ignore and try next method
                 }
             }
             
+            // 2. Try decimal or integer values followed by h, m, s, min, mins, minutes, second, seconds, etc.
             try {
                 var totalMs = 0L
-                val regex = "(\\d+)\\s*([hms])".toRegex()
+                val regex = "(\\d+(?:\\.\\d+)?)\\s*([hms])".toRegex()
                 val matches = regex.findAll(clean.lowercase())
                 var found = false
                 for (match in matches) {
-                    val value = match.groupValues[1].toLong()
+                    val value = match.groupValues[1].toDouble()
                     val unit = match.groupValues[2]
                     when (unit) {
-                        "h" -> { totalMs += value * 3600000L; found = true }
-                        "m" -> { totalMs += value * 60000L; found = true }
-                        "s" -> { totalMs += value * 1000L; found = true }
+                        "h" -> { totalMs += (value * 3600000L).toLong(); found = true }
+                        "m" -> { totalMs += (value * 60000L).toLong(); found = true }
+                        "s" -> { totalMs += (value * 1000L).toLong(); found = true }
                     }
                 }
                 if (found) return totalMs
@@ -335,6 +471,7 @@ class NovaNotificationListener : NotificationListenerService() {
             private set
 
         private val callback = this
+        private var updateJob: Job? = null
 
         fun register() {
             try {
@@ -348,6 +485,7 @@ class NovaNotificationListener : NotificationListenerService() {
 
         fun unregister() {
             try {
+                updateJob?.cancel()
                 controller.unregisterCallback(callback)
                 Log.d("NovaBar", "MEDIA_SESSION_LOST: package=${controller.packageName}")
             } catch (e: Exception) {
@@ -359,69 +497,80 @@ class NovaNotificationListener : NotificationListenerService() {
 
         override fun onPlaybackStateChanged(playbackState: PlaybackState?) {
             updateState()
-            evaluateActiveMediaState()
         }
 
         override fun onMetadataChanged(metadata: MediaMetadata?) {
             updateState()
-            evaluateActiveMediaState()
         }
 
         private fun updateState() {
-            val playbackState = try { controller.playbackState } catch (e: Exception) { null }
-            val isPlaying = playbackState?.state == PlaybackState.STATE_PLAYING
-            val metadata = try { controller.metadata } catch (e: Exception) { null }
+            updateJob?.cancel()
+            updateJob = scope.launch(Dispatchers.IO) {
+                val playbackState = try { controller.playbackState } catch (e: Exception) { null }
+                val isPlaying = playbackState?.state == PlaybackState.STATE_PLAYING
+                val metadata = try { controller.metadata } catch (e: Exception) { null }
 
-            val title = try { metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) } catch (e: Exception) { null } ?: ""
-            val artist = try { metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) } catch (e: Exception) { null } ?: ""
-            val duration = try { metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) } catch (e: Exception) { null } ?: 0L
-            val position = try { playbackState?.position } catch (e: Exception) { null } ?: 0L
+                val title = try { metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) } catch (e: Exception) { null } ?: ""
+                val artist = try { metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) } catch (e: Exception) { null } ?: ""
+                val duration = try { metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) } catch (e: Exception) { null } ?: 0L
+                val position = try { playbackState?.position } catch (e: Exception) { null } ?: 0L
 
-            val albumArt = try {
-                metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
-            } catch (e: Exception) {
-                null
+                val albumArt = try {
+                    metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                        ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+                        ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                } catch (e: Exception) {
+                    null
+                }
+
+                var appIcon: android.graphics.drawable.Drawable? = null
+                var appName = ""
+                try {
+                    val pm = packageManager
+                    val appInfo = pm.getApplicationInfo(controller.packageName, 0)
+                    appIcon = pm.getApplicationIcon(appInfo)
+                    appName = pm.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    appName = getHumanReadableAppName(controller.packageName, packageManager)
+                }
+
+                val progress = if (duration > 0) position.toFloat() / duration else 0f
+                val extras = try { controller.extras } catch (e: Exception) { null }
+                
+                val shuffleMode = extras?.getInt("android.support.v4.media.session.extra.SHUFFLE_MODE") ?: 0
+                val isShuffle = shuffleMode == 1 || shuffleMode == 2
+
+                val lastUpdate = playbackState?.lastPositionUpdateTime ?: android.os.SystemClock.elapsedRealtime()
+                
+                val newState = MediaState(
+                    isPlaying = isPlaying,
+                    title = title,
+                    artist = artist,
+                    progress = progress.coerceIn(0f, 1f),
+                    duration = duration,
+                    position = position,
+                    albumArt = albumArt,
+                    appIcon = appIcon,
+                    appName = appName,
+                    isShuffleEnabled = isShuffle,
+                    lastUpdateTime = lastUpdate
+                )
+
+                if (isActive) {
+                    withContext(Dispatchers.Main) {
+                        state = newState
+                        evaluateActiveMediaState()
+                        Log.d("NovaBar", "MEDIA_SESSION_UPDATED: package=${controller.packageName}, title=${state.title}, artist=${state.artist}, isPlaying=${state.isPlaying}")
+                    }
+                }
             }
-
-            var appIcon: android.graphics.drawable.Drawable? = null
-            var appName = ""
-            try {
-                val pm = packageManager
-                val appInfo = pm.getApplicationInfo(controller.packageName, 0)
-                appIcon = pm.getApplicationIcon(appInfo)
-                appName = pm.getApplicationLabel(appInfo).toString()
-            } catch (e: Exception) {
-                appName = getHumanReadableAppName(controller.packageName, packageManager)
-            }
-
-            val progress = if (duration > 0) position.toFloat() / duration else 0f
-            val extras = try { controller.extras } catch (e: Exception) { null }
-            val shuffleMode = extras?.getInt("android.support.v4.media.session.extra.SHUFFLE_MODE") ?: 0
-            val isShuffle = shuffleMode == 1 || shuffleMode == 2
-
-            state = MediaState(
-                isPlaying = isPlaying,
-                title = title,
-                artist = artist,
-                progress = progress.coerceIn(0f, 1f),
-                duration = duration,
-                position = position,
-                albumArt = albumArt,
-                appIcon = appIcon,
-                appName = appName,
-                isShuffleEnabled = isShuffle,
-                lastUpdateTime = System.currentTimeMillis()
-            )
-            Log.d("NovaBar", "MEDIA_SESSION_UPDATED: package=${controller.packageName}, title=${state.title}, artist=${state.artist}, isPlaying=${state.isPlaying}")
         }
     }
 
     // --- NOTIFICATION POSTED/REMOVED HANDLERS ---
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
                 val packageName = sbn.packageName
                 val notification = sbn.notification
@@ -522,7 +671,7 @@ class NovaNotificationListener : NotificationListenerService() {
 
                     val isStopwatch = title.lowercase().contains("stopwatch") || 
                             text.lowercase().contains("stopwatch") || 
-                            actionTitles.any { it.contains("lap") } ||
+                            actionTitles.any { it.contains("lap") || it.contains("split") } ||
                             (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1"))
                     
                     val isTimer = title.lowercase().contains("timer") || 
@@ -534,31 +683,69 @@ class NovaNotificationListener : NotificationListenerService() {
                     val showChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
                     
                     if (isStopwatch && settings.stopwatchEnabled) {
-                        val isRunning = actionTitles.contains("pause") || actionTitles.contains("lap")
+                        activeStopwatchSbn = sbn
+                        val isRunning = actionTitles.any { it.contains("pause") || it.contains("lap") }
+                        
+                        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
+                        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
+                        val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
+
+                        val postTime = sbn.postTime
                         var elapsedMs = 0L
                         if (showChronometer && whenTime > 0) {
                             elapsedMs = System.currentTimeMillis() - whenTime
                         } else {
-                            elapsedMs = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                            val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                            elapsedMs = if (isRunning && parsed > 0 && postTime > 0) {
+                                parsed + (System.currentTimeMillis() - postTime)
+                            } else {
+                                parsed
+                            }
                         }
                         OverlayStateManager.stopwatchState.value = StopwatchState(
                             isRunning = isRunning,
-                            elapsedMs = elapsedMs
+                            elapsedMs = elapsedMs,
+                            hasPause = hasPause,
+                            hasResume = hasResume,
+                            hasLap = hasLap
                         )
                         return@launch
                     } else if (isTimer && settings.timerEnabled) {
-                        val isRunning = actionTitles.contains("pause") || actionTitles.contains("+1") || actionTitles.contains("add")
+                        activeTimerSbn = sbn
+                        val isRunning = actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") }
+
+                        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
+                        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
+                        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
+
+                        val postTime = sbn.postTime
                         var remainingMs = 0L
                         if (showChronometer && whenTime > 0) {
                             remainingMs = whenTime - System.currentTimeMillis()
                         } else {
-                            remainingMs = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                            val parsed = parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                            remainingMs = if (isRunning && parsed > 0 && postTime > 0) {
+                                (parsed - (System.currentTimeMillis() - postTime)).coerceAtLeast(0L)
+                            } else {
+                                parsed
+                            }
                         }
+                        
+                        val currentTimer = OverlayStateManager.timerState.value
+                        val durationMs = if (remainingMs > 0) {
+                            if (currentTimer != null && currentTimer.durationMs > remainingMs) currentTimer.durationMs else remainingMs
+                        } else {
+                            0L
+                        }
+
                         OverlayStateManager.timerState.value = TimerState(
                             isRunning = isRunning,
-                            durationMs = if (remainingMs > 0) remainingMs else 0L,
+                            durationMs = durationMs,
                             remainingMs = if (remainingMs > 0) remainingMs else 0L,
-                            label = if (title.lowercase().contains("timer")) text else title
+                            label = if (title.lowercase().contains("timer")) text else title,
+                            hasPause = hasPause,
+                            hasResume = hasResume,
+                            hasReset = hasReset
                         )
                         return@launch
                     }
@@ -630,7 +817,7 @@ class NovaNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
                 val packageName = sbn.packageName
                 val currentNotification = OverlayStateManager.activeState.value
@@ -657,8 +844,14 @@ class NovaNotificationListener : NotificationListenerService() {
                 // Clear timer/stopwatch if clock notification removed
                 val isClock = packageName.contains("clock") || packageName.contains("deskclock") || packageName.contains("alarm")
                 if (isClock) {
-                    OverlayStateManager.timerState.value = null
-                    OverlayStateManager.stopwatchState.value = null
+                    if (activeTimerSbn?.key == sbn.key) {
+                        activeTimerSbn = null
+                        OverlayStateManager.timerState.value = null
+                    }
+                    if (activeStopwatchSbn?.key == sbn.key) {
+                        activeStopwatchSbn = null
+                        OverlayStateManager.stopwatchState.value = null
+                    }
                 }
                 val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
                 DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0

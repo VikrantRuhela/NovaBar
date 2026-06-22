@@ -52,6 +52,7 @@ data class NovaSettings(
     val alwaysOnConfig: String = "Time • Battery",
     val timeFormat: String = "System Default",
     val showSeconds: Boolean = false,
+    val showOnLockscreen: Boolean = true,
     val overlayEngine: OverlayEngine = OverlayEngine.APPLICATION
 )
 
@@ -95,6 +96,7 @@ class SettingsRepository(private val context: Context) {
         private val ALWAYS_ON_CONFIG = stringPreferencesKey("always_on_config")
         private val TIME_FORMAT = stringPreferencesKey("time_format")
         private val SHOW_SECONDS = booleanPreferencesKey("show_seconds")
+        private val SHOW_ON_LOCKSCREEN = booleanPreferencesKey("show_on_lockscreen")
         private val OVERLAY_ENGINE = stringPreferencesKey("overlay_engine")
     }
 
@@ -135,6 +137,7 @@ class SettingsRepository(private val context: Context) {
             alwaysOnConfig = preferences[ALWAYS_ON_CONFIG] ?: "Time • Battery",
             timeFormat = preferences[TIME_FORMAT] ?: "System Default",
             showSeconds = preferences[SHOW_SECONDS] ?: false,
+            showOnLockscreen = preferences[SHOW_ON_LOCKSCREEN] ?: true,
             overlayEngine = when (preferences[OVERLAY_ENGINE] ?: "application") {
                 "accessibility" -> OverlayEngine.ACCESSIBILITY
                 else -> OverlayEngine.APPLICATION
@@ -276,6 +279,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[SHOW_SECONDS] = show }
     }
 
+    suspend fun updateShowOnLockscreen(show: Boolean) {
+        context.dataStore.edit { it[SHOW_ON_LOCKSCREEN] = show }
+    }
+
     suspend fun addAllowedPackage(pkg: String) {
         context.dataStore.edit { preferences ->
             val current = preferences[ALLOWED_PACKAGES] ?: emptySet()
@@ -337,6 +344,7 @@ class SettingsRepository(private val context: Context) {
             preferences[ALWAYS_ON_CONFIG] = s.alwaysOnConfig
             preferences[TIME_FORMAT] = s.timeFormat
             preferences[SHOW_SECONDS] = s.showSeconds
+            preferences[SHOW_ON_LOCKSCREEN] = s.showOnLockscreen
             preferences[OVERLAY_ENGINE] = when (s.overlayEngine) {
                 OverlayEngine.ACCESSIBILITY -> "accessibility"
                 OverlayEngine.APPLICATION -> "application"

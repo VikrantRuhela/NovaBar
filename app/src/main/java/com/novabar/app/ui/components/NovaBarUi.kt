@@ -7,6 +7,14 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,6 +22,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,23 +33,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.novabar.app.domain.*
 import com.novabar.app.presentation.OverlayViewModel
 import com.novabar.app.presentation.ViewModelFactory
 import com.novabar.app.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import androidx.compose.foundation.gestures.awaitFirstDown
 
 fun drawableToBitmap(drawable: android.graphics.drawable.Drawable?): Bitmap? {
@@ -161,16 +180,36 @@ fun NovaBarUi() {
         factory = ViewModelFactory(context)
     )
 
-    val activeState by viewModel.activeState.collectAsState()
+    val activeStateKey by remember {
+        viewModel.activeState.map { state ->
+            when (state) {
+                is OverlayState.Idle -> "Idle"
+                is OverlayState.Charging -> "Charging"
+                is OverlayState.Notification -> "Notification"
+                is OverlayState.Timer -> "Timer"
+                is OverlayState.Stopwatch -> "Stopwatch"
+                is OverlayState.Navigation -> "Navigation"
+                is OverlayState.Media -> "Media"
+                is OverlayState.PhoneCall -> "PhoneCall"
+            }
+        }.distinctUntilChanged()
+    }.collectAsState(initial = "Idle")
     val settings by viewModel.settingsFlow.collectAsState()
     val isDarkBg by viewModel.isDarkBackground.collectAsState()
     val isExpanded by OverlayStateManager.isExpanded.collectAsState()
     val activeList by OverlayStateManager.activeActivities.collectAsState()
 
+    LaunchedEffect(isExpanded) {
+        if (isExpanded && activeStateKey == "Media") {
+            val elapsed = System.currentTimeMillis() - DiagnosticsManager.expandClickTime
+            Log.d("NovaBar", "MEDIA_EXPAND_ANIMATION_STARTED: elapsed=${elapsed}ms")
+        }
+    }
+
     var userInteractionTick by remember { mutableStateOf(0L) }
 
-    val targetState = when (val s = activeState) {
-        is OverlayState.Media -> {
+    val targetState = when (activeStateKey) {
+        "Media" -> {
             when (settings.defaultPresentationMode) {
                 "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
                 "Expanded" -> NowBarState.EXPANDED
@@ -188,35 +227,69 @@ fun NovaBarUi() {
 
     var lastTargetState by remember { mutableStateOf<NowBarState?>(null) }
     LaunchedEffect(targetState) {
-        if (lastTargetState != null && lastTargetState != targetState) {
-            Log.d("NovaBar", "CURRENT_STATE: $lastTargetState, TARGET_STATE: $targetState")
-        } else if (lastTargetState == null) {
+        val prev = lastTargetState
+        lastTargetState = targetState
+        
+        if (prev != null) {
+            val isGrowing = when {
+                targetState == NowBarState.EXPANDED -> true
+                targetState == NowBarState.COMPACT && prev == NowBarState.MINIMIZED -> true
+                else -> false
+            }
+            if (isGrowing) {
+                val modeStr = when (targetState) {
+                    NowBarState.MINIMIZED -> "Minimized"
+                    NowBarState.COMPACT -> "Compact"
+                    NowBarState.EXPANDED -> "Expanded"
+                }
+                OverlayStateManager.windowMode.value = modeStr
+            }
+        } else {
+            val modeStr = when (targetState) {
+                NowBarState.MINIMIZED -> "Minimized"
+                NowBarState.COMPACT -> "Compact"
+                NowBarState.EXPANDED -> "Expanded"
+            }
+            OverlayStateManager.windowMode.value = modeStr
+        }
+
+        if (prev != null && prev != targetState) {
+            Log.d("NovaBar", "CURRENT_STATE: $prev, TARGET_STATE: $targetState")
+        } else if (prev == null) {
             Log.d("NovaBar", "CURRENT_STATE: null, TARGET_STATE: $targetState")
         }
-        lastTargetState = targetState
     }
 
     val textSizeOffset = getTextSizeOffset(settings.textSize)
 
-    // Palette Color Extraction glass tint
-    val extractedColor = remember(activeState) {
-        val mediaState = (activeState as? OverlayState.Media)?.data
-        val art = mediaState?.albumArt
+    // Palette Color Extraction glass tint (Asynchronous)
+    var extractedColor by remember { mutableStateOf<Color?>(null) }
+    val albumArtState by remember {
+        viewModel.activeState.map { state ->
+            (state as? OverlayState.Media)?.data?.albumArt
+        }.distinctUntilChanged()
+    }.collectAsState(initial = null)
+
+    LaunchedEffect(albumArtState) {
+        val art = albumArtState
         if (art != null) {
-            try {
-                val palette = androidx.palette.graphics.Palette.from(art).generate()
-                val colorVal = palette.getMutedColor(palette.getDominantColor(0))
-                if (colorVal != 0) Color(colorVal) else null
-            } catch (e: Exception) {
-                null
+            val color = withContext(Dispatchers.Default) {
+                try {
+                    val palette = androidx.palette.graphics.Palette.from(art).generate()
+                    val colorVal = palette.getMutedColor(palette.getDominantColor(0))
+                    if (colorVal != 0) Color(colorVal) else null
+                } catch (e: Exception) {
+                    null
+                }
             }
+            extractedColor = color
         } else {
-            null
+            extractedColor = null
         }
     }
 
-    LaunchedEffect(isExpanded, activeState, userInteractionTick, settings.autoCollapseTimeout) {
-        if (isExpanded && activeState !is OverlayState.Idle) {
+    LaunchedEffect(isExpanded, activeStateKey, userInteractionTick, settings.autoCollapseTimeout) {
+        if (isExpanded && activeStateKey != "Idle") {
             delay(settings.autoCollapseTimeout * 1000L)
             OverlayStateManager.collapse()
         }
@@ -233,13 +306,14 @@ fun NovaBarUi() {
     val targetColor = baseBackgroundColor.copy(alpha = settings.opacity)
     
     // Apply glass tint composite color
+    val extColor = extractedColor
     val backgroundColor by animateColorAsState(
-        targetValue = if (extractedColor != null) {
+        targetValue = if (extColor != null) {
             val tintOpacity = 0.12f
             Color(
-                red = (targetColor.red * (1f - tintOpacity) + extractedColor.red * tintOpacity),
-                green = (targetColor.green * (1f - tintOpacity) + extractedColor.green * tintOpacity),
-                blue = (targetColor.blue * (1f - tintOpacity) + extractedColor.blue * tintOpacity),
+                red = (targetColor.red * (1f - tintOpacity) + extColor.red * tintOpacity),
+                green = (targetColor.green * (1f - tintOpacity) + extColor.green * tintOpacity),
+                blue = (targetColor.blue * (1f - tintOpacity) + extColor.blue * tintOpacity),
                 alpha = targetColor.alpha
             )
         } else {
@@ -255,133 +329,280 @@ fun NovaBarUi() {
         label = "BorderColor"
     )
 
-    val showOverlay = activeState !is OverlayState.Idle || settings.alwaysOnBar
+    val showOverlay = activeStateKey != "Idle" || settings.alwaysOnBar
 
     // Dimensions
     val borderThickness = settings.barBorderThickness.dp
-    val minWidth = (120 * settings.barWidthScale).dp
-
-    val widthModifier = when (targetState) {
-        NowBarState.MINIMIZED -> Modifier.width((115 * settings.barWidthScale).dp)
-        NowBarState.COMPACT -> Modifier.width((185 * settings.barWidthScale).dp)
-        NowBarState.EXPANDED -> Modifier.width(290.dp)
+    val targetWidth = when (targetState) {
+        NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
+        NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
+        NowBarState.EXPANDED -> 290.dp
     }
 
-    val heightModifier = when (targetState) {
-        NowBarState.MINIMIZED -> Modifier.height((38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp))
-        NowBarState.COMPACT -> Modifier.height((44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp))
-        NowBarState.EXPANDED -> Modifier.height(205.dp)
+    val targetHeight = when (targetState) {
+        NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
+        NowBarState.COMPACT -> (44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp)
+        NowBarState.EXPANDED -> 205.dp
+    }
+
+    val animatedWidth by animateDpAsState(
+        targetValue = targetWidth,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "animatedWidth",
+        finishedListener = { width ->
+            if (targetState == NowBarState.EXPANDED && width == 290.dp) {
+                val elapsed = System.currentTimeMillis() - DiagnosticsManager.expandClickTime
+                Log.d("NovaBar", "MEDIA_EXPAND_COMPLETE: elapsed=${elapsed}ms")
+            }
+            
+            val modeStr = when (targetState) {
+                NowBarState.MINIMIZED -> "Minimized"
+                NowBarState.COMPACT -> "Compact"
+                NowBarState.EXPANDED -> "Expanded"
+            }
+            if (OverlayStateManager.windowMode.value != modeStr) {
+                OverlayStateManager.windowMode.value = modeStr
+            }
+        }
+    )
+
+    val animatedHeight by animateDpAsState(
+        targetValue = targetHeight,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "animatedHeight"
+    )
+
+    val showDebug by DiagnosticsManager.showDebugMarkers.collectAsState()
+    val winX by DiagnosticsManager.windowX.collectAsState()
+    val winY by DiagnosticsManager.windowY.collectAsState()
+    val winWidth by DiagnosticsManager.windowWidth.collectAsState()
+    val winHeight by DiagnosticsManager.windowHeight.collectAsState()
+    val centerX = winX + winWidth / 2
+    val centerY = winY + winHeight / 2
+
+    val rootAlignment = when (settings.barGravity) {
+        "Left" -> Alignment.TopStart
+        "Right" -> Alignment.TopEnd
+        else -> Alignment.TopCenter
     }
 
     AnimatedVisibility(
         visible = showOverlay,
-        enter = fadeIn() + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy)),
-        exit = fadeOut() + shrinkVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy))
+        enter = fadeIn(),
+        exit = fadeOut()
     ) {
         Box(
-            modifier = Modifier
-                .then(widthModifier)
-                .then(heightModifier)
-                .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                )
-                .shadow(elevation = 12.dp, shape = RoundedCornerShape(settings.cornerRadius.dp))
-                .border(borderThickness, borderColor, RoundedCornerShape(settings.cornerRadius.dp))
-                .clip(RoundedCornerShape(settings.cornerRadius.dp))
-                .background(backgroundColor)
-                .pointerInput(activeList) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            var dragX = 0f
-                            var isSwipe = false
-                            val pointerId = down.id
-                            val touchSlop = viewConfiguration.touchSlop
-                            
-                            do {
-                                val event = awaitPointerEvent()
-                                val dragChange = event.changes.firstOrNull { it.id == pointerId }
-                                if (dragChange != null) {
-                                    if (dragChange.pressed) {
-                                        val diffX = dragChange.position.x - dragChange.previousPosition.x
-                                        dragX += diffX
-                                        if (kotlin.math.abs(dragX) > touchSlop) {
-                                            isSwipe = true
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = rootAlignment
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(animatedWidth)
+                    .height(animatedHeight)
+                    .onGloballyPositioned { coordinates ->
+                        val rect = coordinates.boundsInWindow()
+                        val androidRect = android.graphics.Rect(
+                            rect.left.roundToInt(),
+                            rect.top.roundToInt(),
+                            rect.right.roundToInt(),
+                            rect.bottom.roundToInt()
+                        )
+                        OverlayStateManager.updatePillBounds(androidRect)
+                    }
+                    .shadow(elevation = 12.dp, shape = RoundedCornerShape(settings.cornerRadius.dp))
+                    .border(borderThickness, borderColor, RoundedCornerShape(settings.cornerRadius.dp))
+                    .clip(RoundedCornerShape(settings.cornerRadius.dp))
+                    .background(backgroundColor)
+                    .pointerInput(activeList) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                var dragX = 0f
+                                var isSwipe = false
+                                val pointerId = down.id
+                                val touchSlop = viewConfiguration.touchSlop
+                                
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val dragChange = event.changes.firstOrNull { it.id == pointerId }
+                                    if (dragChange != null) {
+                                        if (dragChange.pressed) {
+                                            val diffX = dragChange.position.x - dragChange.previousPosition.x
+                                            dragX += diffX
+                                            if (kotlin.math.abs(dragX) > touchSlop) {
+                                                isSwipe = true
+                                            }
+                                            if (isSwipe) {
+                                                dragChange.consume()
+                                            }
                                         }
-                                        if (isSwipe) {
-                                            dragChange.consume()
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                
+                                if (isSwipe) {
+                                    if (dragX > 60f) {
+                                        OverlayStateManager.swipeRight()
+                                        userInteractionTick = System.currentTimeMillis()
+                                    } else if (dragX < -60f) {
+                                        OverlayStateManager.swipeLeft()
+                                        userInteractionTick = System.currentTimeMillis()
+                                    }
+                                } else {
+                                    // Tap!
+                                    if (activeStateKey != "Idle") {
+                                        if (activeStateKey == "Media") {
+                                            DiagnosticsManager.expandClickTime = System.currentTimeMillis()
+                                            Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
+                                        }
+                                        OverlayStateManager.expand()
+                                        userInteractionTick = System.currentTimeMillis()
+                                    }
+                                }
+                            }
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                val activeStateMap = remember {
+                    mutableStateMapOf<String, OverlayState>().apply {
+                        val initial = viewModel.activeState.value
+                        val key = when (initial) {
+                            is OverlayState.Idle -> "Idle"
+                            is OverlayState.Charging -> "Charging"
+                            is OverlayState.Notification -> "Notification"
+                            is OverlayState.Timer -> "Timer"
+                            is OverlayState.Stopwatch -> "Stopwatch"
+                            is OverlayState.Navigation -> "Navigation"
+                            is OverlayState.Media -> "Media"
+                            is OverlayState.PhoneCall -> "PhoneCall"
+                        }
+                        put(key, initial)
+                    }
+                }
+                LaunchedEffect(Unit) {
+                    viewModel.activeState.collect { state ->
+                        val key = when (state) {
+                            is OverlayState.Idle -> "Idle"
+                            is OverlayState.Charging -> "Charging"
+                            is OverlayState.Notification -> "Notification"
+                            is OverlayState.Timer -> "Timer"
+                            is OverlayState.Stopwatch -> "Stopwatch"
+                            is OverlayState.Navigation -> "Navigation"
+                            is OverlayState.Media -> "Media"
+                            is OverlayState.PhoneCall -> "PhoneCall"
+                        }
+                        activeStateMap[key] = state
+                    }
+                }
+
+                Crossfade(
+                    targetState = activeStateKey,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                    label = "ActiveStateCrossfade"
+                ) { key ->
+                    val state = activeStateMap[key]
+                    if (state != null) {
+                        val stateTargetState = when (key) {
+                            "Media" -> {
+                                when (settings.defaultPresentationMode) {
+                                    "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                                    "Expanded" -> NowBarState.EXPANDED
+                                    else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
+                                }
+                            }
+                            else -> {
+                                when (settings.defaultPresentationMode) {
+                                    "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                                    "Expanded" -> NowBarState.EXPANDED
+                                    else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
+                                }
+                            }
+                        }
+                        val stateTargetWidth = when (stateTargetState) {
+                            NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
+                            NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
+                            NowBarState.EXPANDED -> 290.dp
+                        }
+                        val stateTargetHeight = when (stateTargetState) {
+                            NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
+                            NowBarState.COMPACT -> (44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp)
+                            NowBarState.EXPANDED -> 205.dp
+                        }
+
+                        Box(
+                            modifier = Modifier.requiredSize(stateTargetWidth, stateTargetHeight),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when (state) {
+                                is OverlayState.PhoneCall -> PhoneCallView(state.data, stateTargetState, foregroundColor, textSizeOffset) {
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
+                                is OverlayState.Charging -> ChargingPill(state.data, stateTargetState, foregroundColor, textSizeOffset)
+                                is OverlayState.Notification -> NotificationView(state.data, stateTargetState, viewModel, foregroundColor, textSizeOffset)
+                                is OverlayState.Timer -> TimerView(state.data, stateTargetState, foregroundColor, settings.showSeconds, textSizeOffset) {
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
+                                is OverlayState.Stopwatch -> StopwatchView(state.data, stateTargetState, foregroundColor, settings.showSeconds, textSizeOffset) {
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
+                                is OverlayState.Navigation -> NavigationView(state.data, stateTargetState, foregroundColor, settings.timeFormat, textSizeOffset)
+                                is OverlayState.Media -> {
+                                    MediaView(
+                                        state = state.data,
+                                        currentState = stateTargetState,
+                                        color = foregroundColor,
+                                        albumArtCornerRadius = settings.albumArtCornerRadius,
+                                        visualizerStyle = settings.visualizerStyle,
+                                        visualizerSensitivity = settings.visualizerSensitivity,
+                                        progressVisibility = settings.progressVisibility,
+                                        onSeekTo = { posMs ->
+                                            com.novabar.app.services.NovaNotificationListener.seekTo(posMs)
+                                        },
+                                        onInteraction = {
+                                            userInteractionTick = System.currentTimeMillis()
+                                        }
+                                    )
+                                }
+                                is OverlayState.Idle -> {
+                                    if (settings.alwaysOnBar) {
+                                        AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset)
+                                    } else {
+                                        Row(modifier = Modifier.padding(horizontal = 14.dp)) {
+                                            Text("Ready", color = foregroundColor, fontSize = (12f + textSizeOffset).sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
-                            } while (event.changes.any { it.pressed })
-                            
-                            if (isSwipe) {
-                                if (dragX > 60f) {
-                                    OverlayStateManager.swipeRight()
-                                    userInteractionTick = System.currentTimeMillis()
-                                } else if (dragX < -60f) {
-                                    OverlayStateManager.swipeLeft()
-                                    userInteractionTick = System.currentTimeMillis()
-                                }
-                            } else {
-                                // Tap!
-                                if (activeState !is OverlayState.Idle) {
-                                    OverlayStateManager.expand()
-                                    userInteractionTick = System.currentTimeMillis()
-                                }
                             }
                         }
                     }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Crossfade(
-                targetState = activeState,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-                label = "ActiveStateCrossfade"
-            ) { state ->
-                when (state) {
-                    is OverlayState.PhoneCall -> PhoneCallView(state.data, targetState, foregroundColor, textSizeOffset) {
-                        userInteractionTick = System.currentTimeMillis()
+                }
+
+                if (showDebug) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        drawLine(Color.Red, Offset(cx, 0f), Offset(cx, size.height), strokeWidth = 1.dp.toPx())
+                        drawLine(Color.Red, Offset(0f, cy), Offset(size.width, cy), strokeWidth = 1.dp.toPx())
+                        drawCircle(Color.Red, radius = 4.dp.toPx(), center = Offset(cx, cy))
                     }
-                    is OverlayState.Charging -> ChargingPill(state.data, targetState, foregroundColor, textSizeOffset)
-                    is OverlayState.Notification -> NotificationView(state.data, targetState, viewModel, foregroundColor, textSizeOffset)
-                    is OverlayState.Timer -> TimerView(state.data, targetState, foregroundColor, settings.showSeconds, textSizeOffset) {
-                        userInteractionTick = System.currentTimeMillis()
-                    }
-                    is OverlayState.Stopwatch -> StopwatchView(state.data, targetState, foregroundColor, settings.showSeconds, textSizeOffset) {
-                        userInteractionTick = System.currentTimeMillis()
-                    }
-                    is OverlayState.Navigation -> NavigationView(state.data, targetState, foregroundColor, settings.timeFormat, textSizeOffset)
-                    is OverlayState.Media -> {
-                        MediaView(
-                            state = state.data,
-                            currentState = targetState,
-                            color = foregroundColor,
-                            albumArtCornerRadius = settings.albumArtCornerRadius,
-                            visualizerStyle = settings.visualizerStyle,
-                            visualizerSensitivity = settings.visualizerSensitivity,
-                            progressVisibility = settings.progressVisibility,
-                            onSeekTo = { posMs ->
-                                com.novabar.app.services.NovaNotificationListener.seekTo(posMs)
-                            },
-                            onInteraction = {
-                                userInteractionTick = System.currentTimeMillis()
-                            }
-                        )
-                    }
-                    is OverlayState.Idle -> {
-                        if (settings.alwaysOnBar) {
-                            AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset)
-                        } else {
-                            Row(modifier = Modifier.padding(horizontal = 14.dp)) {
-                                Text("Ready", color = foregroundColor, fontSize = (12f + textSizeOffset).sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
+                }
+            }
+
+            if (showDebug) {
+                val density = LocalContext.current.resources.displayMetrics.density
+                val animatedHeightPx = (animatedHeight.value * density).roundToInt()
+                val animatedCenterY = winY + animatedHeightPx / 2
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                        .padding(8.dp)
+                ) {
+                    Text("Top Y: $winY (STABLE)", color = Color.Green, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("Height: ${animatedHeight.value.roundToInt()} dp", color = Color.Green, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("Animated Center Y: $animatedCenterY", color = Color.Green, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("Window Y: $winY", color = Color.Green, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -398,6 +619,8 @@ fun PhoneCallView(
     onInteraction: () -> Unit
 ) {
     val sizeOffset = textSizeOffset
+    val context = LocalContext.current
+    var isEndingCall by remember { mutableStateOf(false) }
     when (currentState) {
         NowBarState.MINIMIZED -> {
             Row(
@@ -504,24 +727,97 @@ fun PhoneCallView(
                             Text("Answer", color = Color.White, fontSize = (11f + sizeOffset).sp)
                         }
                         Button(
-                            onClick = { onInteraction() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336)),
-                            modifier = Modifier.weight(1f).padding(horizontal = 6.dp)
+                            onClick = {
+                                isEndingCall = true
+                                onInteraction()
+                                OverlayStateManager.endCall(context)
+                            },
+                            enabled = !isEndingCall,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFF44336),
+                                disabledContainerColor = Color(0xFFD32F2F)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 6.dp)
+                                .graphicsLayer {
+                                    if (isEndingCall) {
+                                        scaleX = 0.95f
+                                        scaleY = 0.95f
+                                    }
+                                }
                         ) {
-                            Text("Decline", color = Color.White, fontSize = (11f + sizeOffset).sp)
+                            if (isEndingCall) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Decline", color = Color.White, fontSize = (11f + sizeOffset).sp)
+                            }
                         }
                     } else {
                         Button(
-                            onClick = { onInteraction() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336)),
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp)
+                            onClick = {
+                                isEndingCall = true
+                                onInteraction()
+                                OverlayStateManager.endCall(context)
+                            },
+                            enabled = !isEndingCall,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFF44336),
+                                disabledContainerColor = Color(0xFFD32F2F)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp)
+                                .graphicsLayer {
+                                    if (isEndingCall) {
+                                        scaleX = 0.95f
+                                        scaleY = 0.95f
+                                    }
+                                }
                         ) {
-                            Text("End Call", color = Color.White, fontSize = (11f + sizeOffset).sp)
+                            if (isEndingCall) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text("Ending...", color = Color.White, fontSize = (11f + sizeOffset).sp)
+                                }
+                            } else {
+                                Text("End Call", color = Color.White, fontSize = (11f + sizeOffset).sp)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// --- BOLT ICON ---
+@Composable
+fun BoltIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val path = Path().apply {
+            moveTo(w * 0.6f, 0.05f * h)
+            lineTo(w * 0.25f, 0.55f * h)
+            lineTo(w * 0.5f, 0.55f * h)
+            lineTo(w * 0.4f, 0.95f * h)
+            lineTo(w * 0.75f, 0.45f * h)
+            lineTo(w * 0.5f, 0.45f * h)
+            close()
+        }
+        drawPath(path, color)
     }
 }
 
@@ -535,85 +831,176 @@ fun ChargingPill(
     contentAlpha: Float = 1f
 ) {
     val sizeOffset = textSizeOffset
-    when (currentState) {
-        NowBarState.MINIMIZED -> {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
-            ) {
-                Text("⚡", color = Color(0xFFFFEB3B), fontSize = (12f + sizeOffset).sp)
-                Text(
-                    text = "${state.batteryPercentage}%",
-                    color = color,
-                    fontSize = (11f + sizeOffset).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        NowBarState.COMPACT -> {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("⚡", color = Color(0xFFFFEB3B), fontSize = (14f + sizeOffset).sp)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Charging ${state.batteryPercentage}%",
-                        color = color,
-                        fontSize = (12f + sizeOffset).sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                    if (state.speed.isNotEmpty()) {
-                        Text(
-                            text = state.speed,
-                            color = color.copy(alpha = 0.6f),
-                            fontSize = (10f + sizeOffset).sp,
-                            maxLines = 1
-                        )
+    val batteryPercent = state.batteryPercentage.coerceIn(0, 100)
+    
+    // Smooth transition when battery updates
+    val animatedPercent by animateFloatAsState(
+        targetValue = batteryPercent.toFloat(),
+        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+        label = "batteryPercent"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "chargingWave")
+    val wavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2f * Math.PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wavePhase"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawBehind {
+                val width = size.width
+                val height = size.height
+
+                // Calculate fill width based on percentage
+                val fillFraction = animatedPercent / 100f
+                val fillWidth = width * fillFraction
+
+                // Premium green charging color
+                val fillThemeColor = Color(0xFF34C759)
+
+                if (fillWidth > 0f) {
+                    val steps = 30
+
+                    // Layer 1: alpha = 0.18, amplitude = 3dp
+                    val amplitude1 = 3.dp.toPx()
+                    val frequency1 = (2f * Math.PI.toFloat()) / height
+                    val fillPath1 = Path()
+                    fillPath1.moveTo(0f, 0f)
+                    val xAtZero1 = fillWidth + kotlin.math.sin(0.0 - wavePhase.toDouble()).toFloat() * amplitude1
+                    fillPath1.lineTo(xAtZero1.coerceIn(0f, width), 0f)
+                    for (i in 0..steps) {
+                        val y = (i.toFloat() / steps) * height
+                        val x = fillWidth + kotlin.math.sin(y * frequency1 - wavePhase.toDouble()).toFloat() * amplitude1
+                        fillPath1.lineTo(x.coerceIn(0f, width), y)
                     }
+                    fillPath1.lineTo(0f, height)
+                    fillPath1.close()
+                    drawPath(path = fillPath1, color = fillThemeColor.copy(alpha = 0.18f))
+
+                    // Layer 2: alpha = 0.10, amplitude = 2dp (with phase offset)
+                    val amplitude2 = 2.dp.toPx()
+                    val frequency2 = (2f * Math.PI.toFloat()) / (height * 0.8f)
+                    val phaseOffset2 = 2f
+                    val fillPath2 = Path()
+                    fillPath2.moveTo(0f, 0f)
+                    val xAtZero2 = fillWidth + kotlin.math.sin(0.0 - (wavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
+                    fillPath2.lineTo(xAtZero2.coerceIn(0f, width), 0f)
+                    for (i in 0..steps) {
+                        val y = (i.toFloat() / steps) * height
+                        val x = fillWidth + kotlin.math.sin(y * frequency2 - (wavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
+                        fillPath2.lineTo(x.coerceIn(0f, width), y)
+                    }
+                    fillPath2.lineTo(0f, height)
+                    fillPath2.close()
+                    drawPath(path = fillPath2, color = fillThemeColor.copy(alpha = 0.10f))
+
+                    // Layer 3: alpha = 0.05, amplitude = 1dp (with phase/depth offset)
+                    val amplitude3 = 1.dp.toPx()
+                    val frequency3 = (2f * Math.PI.toFloat()) / (height * 1.2f)
+                    val phaseOffset3 = 4f
+                    val fillPath3 = Path()
+                    fillPath3.moveTo(0f, 0f)
+                    val xAtZero3 = fillWidth + kotlin.math.sin(0.0 - (wavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
+                    fillPath3.lineTo(xAtZero3.coerceIn(0f, width), 0f)
+                    for (i in 0..steps) {
+                        val y = (i.toFloat() / steps) * height
+                        val x = fillWidth + kotlin.math.sin(y * frequency3 - (wavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
+                        fillPath3.lineTo(x.coerceIn(0f, width), y)
+                    }
+                    fillPath3.lineTo(0f, height)
+                    fillPath3.close()
+                    drawPath(path = fillPath3, color = fillThemeColor.copy(alpha = 0.05f))
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        when (currentState) {
+            NowBarState.MINIMIZED -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+                ) {
+                    BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(12.dp))
+                    Text(
+                        text = "${state.batteryPercentage}%",
+                        color = color,
+                        fontSize = (11f + sizeOffset).sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
-        }
-        NowBarState.EXPANDED -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(14.dp)
-                    .graphicsLayer { alpha = contentAlpha },
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
+            NowBarState.COMPACT -> {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("⚡", color = Color(0xFFFFEB3B), fontSize = (22f + sizeOffset).sp)
-                    Column {
+                    BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Charging ${state.batteryPercentage}%",
                             color = color,
-                            fontSize = (15f + sizeOffset).sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = (12f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
-                        Text(
-                            text = state.speed,
-                            color = color.copy(alpha = 0.6f),
-                            fontSize = (11f + sizeOffset).sp
-                        )
+                        if (state.speed.isNotEmpty()) {
+                            Text(
+                                text = state.speed,
+                                color = color.copy(alpha = 0.6f),
+                                fontSize = (10f + sizeOffset).sp,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Battery Temp: ${state.temperature}°C", color = color.copy(alpha = 0.8f), fontSize = (11f + sizeOffset).sp)
-                    Text("Status: Charging normally", color = color.copy(alpha = 0.5f), fontSize = (9f + sizeOffset).sp)
+            }
+            NowBarState.EXPANDED -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(14.dp)
+                        .graphicsLayer { alpha = contentAlpha },
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(24.dp))
+                        Column {
+                            Text(
+                                text = "Charging ${state.batteryPercentage}%",
+                                color = color,
+                                fontSize = (15f + sizeOffset).sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = state.speed,
+                                color = color.copy(alpha = 0.6f),
+                                fontSize = (11f + sizeOffset).sp
+                            )
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Battery Temp: ${state.temperature}°C", color = color.copy(alpha = 0.8f), fontSize = (11f + sizeOffset).sp)
+                        Text("Status: Charging normally", color = color.copy(alpha = 0.5f), fontSize = (9f + sizeOffset).sp)
+                    }
                 }
             }
         }
@@ -783,6 +1170,44 @@ fun NotificationView(
 
 // --- TIMER VIEW ---
 @Composable
+fun TimerDisplayText(
+    durationMs: Long,
+    initialRemainingMs: Long,
+    isRunning: Boolean,
+    showSeconds: Boolean,
+    color: Color,
+    fontSize: TextUnit,
+    fontWeight: FontWeight,
+    modifier: Modifier = Modifier
+) {
+    var remainingMs by remember(initialRemainingMs, isRunning) { mutableStateOf(initialRemainingMs) }
+
+    LaunchedEffect(isRunning, initialRemainingMs) {
+        remainingMs = initialRemainingMs
+        if (isRunning) {
+            val startTime = System.currentTimeMillis()
+            val startVal = remainingMs
+            while (remainingMs > 0) {
+                delay(10L)
+                val elapsed = System.currentTimeMillis() - startTime
+                remainingMs = (startVal - elapsed).coerceAtLeast(0L)
+            }
+        }
+    }
+
+    Text(
+        text = formatDuration(remainingMs, showSeconds),
+        color = color,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        modifier = modifier,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+// --- TIMER VIEW ---
+@Composable
 fun TimerView(
     state: TimerState,
     currentState: NowBarState,
@@ -795,22 +1220,6 @@ fun TimerView(
     onInteraction: () -> Unit
 ) {
     val sizeOffset = textSizeOffset
-    var remainingMs by remember(state.remainingMs) { mutableStateOf(state.remainingMs) }
-
-    LaunchedEffect(state.isRunning, state.remainingMs) {
-        remainingMs = state.remainingMs
-        if (state.isRunning) {
-            val startTime = System.currentTimeMillis()
-            val startVal = remainingMs
-            while (remainingMs > 0) {
-                delay(200L)
-                val elapsed = System.currentTimeMillis() - startTime
-                remainingMs = (startVal - elapsed).coerceAtLeast(0L)
-            }
-        }
-    }
-
-    val displayString = formatDuration(remainingMs, showSeconds)
 
     when (currentState) {
         NowBarState.MINIMIZED -> {
@@ -822,13 +1231,14 @@ fun TimerView(
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
             ) {
                 Text("⏱", color = color, fontSize = (11f + sizeOffset).sp)
-                Text(
-                    text = displayString,
+                TimerDisplayText(
+                    durationMs = state.durationMs,
+                    initialRemainingMs = state.remainingMs,
+                    isRunning = state.isRunning,
+                    showSeconds = showSeconds,
                     color = color,
                     fontSize = (11f + sizeOffset).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -850,8 +1260,11 @@ fun TimerView(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = displayString,
+                    TimerDisplayText(
+                        durationMs = state.durationMs,
+                        initialRemainingMs = state.remainingMs,
+                        isRunning = state.isRunning,
+                        showSeconds = showSeconds,
                         color = color.copy(alpha = 0.8f),
                         fontSize = (11f + sizeOffset).sp,
                         fontWeight = FontWeight.Medium
@@ -889,8 +1302,11 @@ fun TimerView(
                     }
                 }
                 
-                Text(
-                    text = displayString,
+                TimerDisplayText(
+                    durationMs = state.durationMs,
+                    initialRemainingMs = state.remainingMs,
+                    isRunning = state.isRunning,
+                    showSeconds = showSeconds,
                     color = color,
                     fontSize = (26f + sizeOffset).sp,
                     fontWeight = FontWeight.Bold,
@@ -908,17 +1324,63 @@ fun TimerView(
                         },
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    val resetInteractionSource = remember { MutableInteractionSource() }
+                    val isResetPressed by resetInteractionSource.collectIsPressedAsState()
+                    val resetScale by animateFloatAsState(if (isResetPressed) 0.92f else 1f, label = "ResetScale")
+
                     Button(
-                        onClick = { onInteraction() },
-                        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.1f))
+                        onClick = {
+                            onInteraction()
+                            com.novabar.app.services.NovaNotificationListener.resetTimer()
+                        },
+                        enabled = state.hasReset,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = color.copy(alpha = 0.1f),
+                            disabledContainerColor = color.copy(alpha = 0.03f)
+                        ),
+                        interactionSource = resetInteractionSource,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = resetScale
+                                scaleY = resetScale
+                            }
+                            .alpha(if (state.hasReset) 1f else 0.5f)
                     ) {
                         Text("Reset", color = color, fontSize = (11f + sizeOffset).sp)
                     }
+
+                    val playInteractionSource = remember { MutableInteractionSource() }
+                    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+                    val playScale by animateFloatAsState(if (isPlayPressed) 0.92f else 1f, label = "PlayScale")
+                    val canPauseOrResume = if (state.isRunning) state.hasPause else state.hasResume
+
                     Button(
-                        onClick = { onInteraction() },
-                        colors = ButtonDefaults.buttonColors(containerColor = color)
+                        onClick = {
+                            onInteraction()
+                            if (state.isRunning) {
+                                com.novabar.app.services.NovaNotificationListener.pauseTimer()
+                            } else {
+                                com.novabar.app.services.NovaNotificationListener.resumeTimer()
+                            }
+                        },
+                        enabled = canPauseOrResume,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = color,
+                            disabledContainerColor = color.copy(alpha = 0.3f)
+                        ),
+                        interactionSource = playInteractionSource,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = playScale
+                                scaleY = playScale
+                            }
+                            .alpha(if (canPauseOrResume) 1f else 0.5f)
                     ) {
-                        Text(if (state.isRunning) "Pause" else "Resume", color = if (color == Color.White) Color.Black else Color.White, fontSize = (11f + sizeOffset).sp)
+                        Text(
+                            text = if (state.isRunning) "Pause" else "Resume",
+                            color = if (color == Color.White) Color.Black else Color.White,
+                            fontSize = (11f + sizeOffset).sp
+                        )
                     }
                 }
             }
@@ -927,24 +1389,59 @@ fun TimerView(
 }
 
 fun formatDuration(ms: Long, showSeconds: Boolean): String {
-    val totalSecs = ms / 1000
-    val hours = totalSecs / 3600
-    val minutes = (totalSecs % 3600) / 60
-    val seconds = totalSecs % 60
+    val hours = ms / 3600000
+    val minutes = (ms % 3600000) / 60000
+    val seconds = (ms % 60000) / 1000
+    val centiseconds = (ms % 1000) / 10
     
-    return if (hours > 0) {
-        if (showSeconds) {
-            String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    return if (showSeconds) {
+        if (hours > 0) {
+            String.format("%02d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
         } else {
-            String.format("%02d:%02d", hours, minutes)
+            String.format("%02d:%02d.%02d", minutes, seconds, centiseconds)
         }
     } else {
-        if (showSeconds) {
-            String.format("%02d:%02d", minutes, seconds)
+        if (hours > 0) {
+            String.format("%02d:%02d:%02d", hours, minutes, seconds)
         } else {
-            String.format("%d min", minutes)
+            String.format("%02d:%02d", minutes, seconds)
         }
     }
+}
+
+// --- STOPWATCH VIEW ---
+@Composable
+fun StopwatchDisplayText(
+    initialElapsedMs: Long,
+    isRunning: Boolean,
+    showSeconds: Boolean,
+    color: Color,
+    fontSize: TextUnit,
+    fontWeight: FontWeight,
+    modifier: Modifier = Modifier
+) {
+    var elapsedMs by remember(initialElapsedMs, isRunning) { mutableStateOf(initialElapsedMs) }
+
+    LaunchedEffect(isRunning, initialElapsedMs) {
+        elapsedMs = initialElapsedMs
+        if (isRunning) {
+            val startTime = System.currentTimeMillis() - elapsedMs
+            while (true) {
+                delay(33L)
+                elapsedMs = System.currentTimeMillis() - startTime
+            }
+        }
+    }
+
+    Text(
+        text = formatStopwatch(elapsedMs, showSeconds),
+        color = color,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        modifier = modifier,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 // --- STOPWATCH VIEW ---
@@ -961,20 +1458,6 @@ fun StopwatchView(
     onInteraction: () -> Unit
 ) {
     val sizeOffset = textSizeOffset
-    var elapsedMs by remember(state.elapsedMs) { mutableStateOf(state.elapsedMs) }
-
-    LaunchedEffect(state.isRunning, state.elapsedMs) {
-        elapsedMs = state.elapsedMs
-        if (state.isRunning) {
-            val startTime = System.currentTimeMillis() - elapsedMs
-            while (true) {
-                delay(100L)
-                elapsedMs = System.currentTimeMillis() - startTime
-            }
-        }
-    }
-
-    val displayString = formatStopwatch(elapsedMs, showSeconds)
 
     when (currentState) {
         NowBarState.MINIMIZED -> {
@@ -986,13 +1469,13 @@ fun StopwatchView(
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
             ) {
                 Text("⏲", color = color, fontSize = (11f + sizeOffset).sp)
-                Text(
-                    text = displayString,
+                StopwatchDisplayText(
+                    initialElapsedMs = state.elapsedMs,
+                    isRunning = state.isRunning,
+                    showSeconds = showSeconds,
                     color = color,
                     fontSize = (11f + sizeOffset).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -1014,8 +1497,10 @@ fun StopwatchView(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = displayString,
+                    StopwatchDisplayText(
+                        initialElapsedMs = state.elapsedMs,
+                        isRunning = state.isRunning,
+                        showSeconds = showSeconds,
                         color = color.copy(alpha = 0.8f),
                         fontSize = (11f + sizeOffset).sp,
                         fontWeight = FontWeight.Medium
@@ -1053,8 +1538,10 @@ fun StopwatchView(
                     }
                 }
                 
-                Text(
-                    text = displayString,
+                StopwatchDisplayText(
+                    initialElapsedMs = state.elapsedMs,
+                    isRunning = state.isRunning,
+                    showSeconds = showSeconds,
                     color = color,
                     fontSize = (26f + sizeOffset).sp,
                     fontWeight = FontWeight.Bold,
@@ -1072,17 +1559,63 @@ fun StopwatchView(
                         },
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    val lapInteractionSource = remember { MutableInteractionSource() }
+                    val isLapPressed by lapInteractionSource.collectIsPressedAsState()
+                    val lapScale by animateFloatAsState(if (isLapPressed) 0.92f else 1f, label = "LapScale")
+
                     Button(
-                        onClick = { onInteraction() },
-                        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.1f))
+                        onClick = {
+                            onInteraction()
+                            com.novabar.app.services.NovaNotificationListener.lapStopwatch()
+                        },
+                        enabled = state.hasLap,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = color.copy(alpha = 0.1f),
+                            disabledContainerColor = color.copy(alpha = 0.03f)
+                        ),
+                        interactionSource = lapInteractionSource,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = lapScale
+                                scaleY = lapScale
+                            }
+                            .alpha(if (state.hasLap) 1f else 0.5f)
                     ) {
                         Text("Lap", color = color, fontSize = (11f + sizeOffset).sp)
                     }
+
+                    val playInteractionSource = remember { MutableInteractionSource() }
+                    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+                    val playScale by animateFloatAsState(if (isPlayPressed) 0.92f else 1f, label = "PlayScale")
+                    val canPauseOrResume = if (state.isRunning) state.hasPause else state.hasResume
+
                     Button(
-                        onClick = { onInteraction() },
-                        colors = ButtonDefaults.buttonColors(containerColor = color)
+                        onClick = {
+                            onInteraction()
+                            if (state.isRunning) {
+                                com.novabar.app.services.NovaNotificationListener.pauseStopwatch()
+                            } else {
+                                com.novabar.app.services.NovaNotificationListener.resumeStopwatch()
+                            }
+                        },
+                        enabled = canPauseOrResume,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = color,
+                            disabledContainerColor = color.copy(alpha = 0.3f)
+                        ),
+                        interactionSource = playInteractionSource,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = playScale
+                                scaleY = playScale
+                            }
+                            .alpha(if (canPauseOrResume) 1f else 0.5f)
                     ) {
-                        Text(if (state.isRunning) "Pause" else "Resume", color = if (color == Color.White) Color.Black else Color.White, fontSize = (11f + sizeOffset).sp)
+                        Text(
+                            text = if (state.isRunning) "Pause" else "Resume",
+                            color = if (color == Color.White) Color.Black else Color.White,
+                            fontSize = (11f + sizeOffset).sp
+                        )
                     }
                 }
             }
@@ -1091,15 +1624,15 @@ fun StopwatchView(
 }
 
 fun formatStopwatch(ms: Long, showSeconds: Boolean): String {
-    val totalSecs = ms / 1000
-    val minutes = totalSecs / 60
-    val seconds = totalSecs % 60
-    val tenths = (ms / 100) % 10
+    val hours = ms / 3600000
+    val minutes = (ms % 3600000) / 60000
+    val seconds = (ms % 60000) / 1000
+    val centiseconds = (ms % 1000) / 10
     
-    return if (showSeconds) {
-        String.format("%02d:%02d.%d", minutes, seconds, tenths)
+    return if (hours > 0) {
+        String.format("%02d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
     } else {
-        String.format("%02d min", minutes)
+        String.format("%02d:%02d.%02d", minutes, seconds, centiseconds)
     }
 }
 
@@ -1248,9 +1781,10 @@ fun AudioVisualizer(
             val startTime = System.currentTimeMillis()
             val startPhase = animationPhase
             while (true) {
-                val delta = System.currentTimeMillis() - startTime
-                animationPhase = startPhase + (delta / 1000f) * 2f * Math.PI.toFloat() * sensitivity
-                delay(16L) // ~60 FPS
+                androidx.compose.runtime.withFrameMillis { frameTime ->
+                    val delta = System.currentTimeMillis() - startTime
+                    animationPhase = startPhase + (delta / 1000f) * 2f * Math.PI.toFloat() * sensitivity
+                }
             }
         }
     }
@@ -1377,6 +1911,58 @@ fun formatTime(ms: Long): String {
     return String.format("%d:%02d", minutes, seconds)
 }
 
+fun queryCurrentMediaStateDirectly(context: android.content.Context): MediaState? {
+    val controller = com.novabar.app.services.NovaNotificationListener.getActiveMediaController() ?: return null
+    val playbackState = try { controller.playbackState } catch (e: Exception) { null }
+    val isPlaying = playbackState?.state == android.media.session.PlaybackState.STATE_PLAYING
+    val metadata = try { controller.metadata } catch (e: Exception) { null }
+
+    val title = try { metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) } catch (e: Exception) { null } ?: ""
+    val artist = try { metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST) } catch (e: Exception) { null } ?: ""
+    val duration = try { metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) } catch (e: Exception) { null } ?: 0L
+    val position = try { playbackState?.position } catch (e: Exception) { null } ?: 0L
+
+    val albumArt = try {
+        metadata?.getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata?.getBitmap(android.media.MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+            ?: metadata?.getBitmap(android.media.MediaMetadata.METADATA_KEY_ART)
+    } catch (e: Exception) {
+        null
+    }
+
+    var appIcon: android.graphics.drawable.Drawable? = null
+    var appName = ""
+    try {
+        val pm = context.packageManager
+        val appInfo = pm.getApplicationInfo(controller.packageName, 0)
+        appIcon = pm.getApplicationIcon(appInfo)
+        appName = pm.getApplicationLabel(appInfo).toString()
+    } catch (e: Exception) {
+        appName = controller.packageName
+    }
+
+    val progress = if (duration > 0) position.toFloat() / duration else 0f
+    val extras = try { controller.extras } catch (e: Exception) { null }
+    val shuffleMode = extras?.getInt("android.support.v4.media.session.extra.SHUFFLE_MODE") ?: 0
+    val isShuffle = shuffleMode == 1 || shuffleMode == 2
+    
+    val lastUpdate = playbackState?.lastPositionUpdateTime ?: android.os.SystemClock.elapsedRealtime()
+
+    return MediaState(
+        isPlaying = isPlaying,
+        title = title,
+        artist = artist,
+        progress = progress.coerceIn(0f, 1f),
+        duration = duration,
+        position = position,
+        albumArt = albumArt,
+        appIcon = appIcon,
+        appName = appName,
+        isShuffleEnabled = isShuffle,
+        lastUpdateTime = lastUpdate
+    )
+}
+
 // --- MEDIA CONTROLS PILL & CARD ---
 @Composable
 fun MediaView(
@@ -1402,26 +1988,20 @@ fun MediaView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
             ) {
-                if (state.albumArt != null) {
-                    Image(
-                        bitmap = state.albumArt.asImageBitmap(),
-                        contentDescription = "Album Art",
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(albumArtCornerRadius.dp))
-                    )
-                } else {
-                    FallbackArtIcon(color = color, sizeDp = 20)
-                }
+                MediaAlbumArtSection(
+                    albumArt = state.albumArt,
+                    color = color,
+                    albumArtCornerRadius = albumArtCornerRadius,
+                    sizeDp = 20
+                )
                 
-                AudioVisualizer(
+                MediaVisualizerSection(
                     style = visualizerStyle,
                     sensitivity = visualizerSensitivity,
                     isPlaying = state.isPlaying,
                     color = color,
-                    modifier = Modifier
-                        .width(24.dp)
-                        .height(12.dp)
+                    widthDp = 24,
+                    heightDp = 12
                 )
             }
         }
@@ -1433,17 +2013,12 @@ fun MediaView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (state.albumArt != null) {
-                    Image(
-                        bitmap = state.albumArt.asImageBitmap(),
-                        contentDescription = "Album Art",
-                        modifier = Modifier
-                            .size(26.dp) // Compact: 24dp - 28dp
-                            .clip(RoundedCornerShape(albumArtCornerRadius.dp))
-                    )
-                } else {
-                    FallbackArtIcon(color = color, sizeDp = 26)
-                }
+                MediaAlbumArtSection(
+                    albumArt = state.albumArt,
+                    color = color,
+                    albumArtCornerRadius = albumArtCornerRadius,
+                    sizeDp = 26
+                )
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -1468,44 +2043,66 @@ fun MediaView(
                     }
                 }
 
-                AudioVisualizer(
+                MediaVisualizerSection(
                     style = visualizerStyle,
                     sensitivity = visualizerSensitivity,
                     isPlaying = state.isPlaying,
                     color = color,
-                    modifier = Modifier
-                        .width(22.dp)
-                        .height(10.dp)
+                    widthDp = 22,
+                    heightDp = 10
                 )
             }
         }
         NowBarState.EXPANDED -> {
-            var dragPosition by remember { mutableStateOf<Float?>(null) }
-            var currentProgressMs by remember { mutableStateOf(state.position) }
-
-            LaunchedEffect(state.position, state.isPlaying) {
-                currentProgressMs = state.position
-                if (state.isPlaying) {
-                    val startTime = System.currentTimeMillis()
-                    val startPosition = state.position
-                    while (true) {
-                        val elapsed = System.currentTimeMillis() - startTime
-                        currentProgressMs = (startPosition + elapsed).coerceAtMost(state.duration)
-                        delay(250L)
-                    }
+            val context = LocalContext.current
+            LaunchedEffect(Unit) {
+                val directState = withContext(Dispatchers.IO) {
+                    queryCurrentMediaStateDirectly(context)
+                }
+                if (directState != null) {
+                    OverlayStateManager.mediaState.value = directState
                 }
             }
 
-            val displayPositionMs = if (dragPosition != null) {
-                (dragPosition!! * state.duration).toLong()
-            } else {
-                currentProgressMs
+            LaunchedEffect(state.title, state.artist) {
+                if (state.title.isNotEmpty() || state.artist.isNotEmpty()) {
+                    val elapsed = System.currentTimeMillis() - DiagnosticsManager.expandClickTime
+                    Log.d("NovaBar", "MEDIA_EXPAND_CONTENT_READY: elapsed=${elapsed}ms")
+                }
             }
 
-            val sliderProgress = if (state.duration > 0) {
-                (displayPositionMs.toFloat() / state.duration).coerceIn(0f, 1f)
-            } else {
-                0f
+            LaunchedEffect(state.albumArt) {
+                if (state.albumArt != null) {
+                    val elapsed = System.currentTimeMillis() - DiagnosticsManager.expandClickTime
+                    Log.d("NovaBar", "MEDIA_ALBUM_ART_READY: elapsed=${elapsed}ms")
+                }
+            }
+
+            val initialPosition = remember(state.position, state.isPlaying, state.lastUpdateTime) {
+                if (state.isPlaying && state.lastUpdateTime > 0) {
+                    val elapsedSinceUpdate = android.os.SystemClock.elapsedRealtime() - state.lastUpdateTime
+                    (state.position + elapsedSinceUpdate).coerceAtMost(state.duration)
+                } else {
+                    state.position
+                }
+            }
+
+            val playbackPositionFlow = remember(state.position, state.isPlaying, state.lastUpdateTime) {
+                kotlinx.coroutines.flow.MutableStateFlow(initialPosition)
+            }
+
+            LaunchedEffect(state.position, state.isPlaying, state.lastUpdateTime) {
+                if (state.isPlaying && state.lastUpdateTime > 0) {
+                    val basePosition = state.position
+                    val baseTime = state.lastUpdateTime
+                    while (true) {
+                        val elapsed = android.os.SystemClock.elapsedRealtime() - baseTime
+                        playbackPositionFlow.value = (basePosition + elapsed).coerceAtMost(state.duration)
+                        delay(250L)
+                    }
+                } else {
+                    playbackPositionFlow.value = state.position
+                }
             }
 
             Column(
@@ -1521,260 +2118,361 @@ fun MediaView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (state.albumArt != null) {
-                        Image(
-                            bitmap = state.albumArt.asImageBitmap(),
-                            contentDescription = "Album Art",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(albumArtCornerRadius.dp))
-                        )
-                    } else {
-                        FallbackArtIcon(color = color, sizeDp = 40)
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = state.title,
-                            color = color,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = state.artist.ifEmpty { "Unknown Artist" },
-                            color = color.copy(alpha = 0.7f),
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    val appIconBitmap = remember(state.appIcon) {
-                        drawableToBitmap(state.appIcon)?.asImageBitmap()
-                    }
-                    if (appIconBitmap != null) {
-                        Image(
-                            bitmap = appIconBitmap,
-                            contentDescription = "App Icon",
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clip(CircleShape)
-                        )
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            alpha = controlsAlpha
-                            translationY = controlsOffsetY.toPx()
-                        }
-                ) {
-                    Slider(
-                        value = sliderProgress,
-                        onValueChange = {
-                            onInteraction()
-                            dragPosition = it
-                        },
-                        onValueChangeFinished = {
-                            val seekMs = (sliderProgress * state.duration).toLong()
-                            onSeekTo(seekMs)
-                            dragPosition = null
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = color,
-                            activeTrackColor = color,
-                            inactiveTrackColor = color.copy(alpha = 0.2f)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(18.dp)
+                    MediaAlbumArtSection(
+                        albumArt = state.albumArt,
+                        color = color,
+                        albumArtCornerRadius = albumArtCornerRadius,
+                        sizeDp = 40
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(formatTime(displayPositionMs), color = color.copy(alpha = 0.6f), fontSize = 10.sp)
-                        Text(formatTime(state.duration), color = color.copy(alpha = 0.6f), fontSize = 10.sp)
-                    }
+
+                    MediaMetadataSection(
+                        title = state.title,
+                        artist = state.artist,
+                        color = color,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MediaVisualizerSection(
+                        style = visualizerStyle,
+                        sensitivity = visualizerSensitivity,
+                        isPlaying = state.isPlaying,
+                        color = color.copy(alpha = 0.8f),
+                        widthDp = 36,
+                        heightDp = 14,
+                        paddingHorizontalDp = 4
+                    )
+
+                    MediaAppIconSection(
+                        appIcon = state.appIcon
+                    )
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
-                        .graphicsLayer {
-                            alpha = controlsAlpha
-                            translationY = controlsOffsetY.toPx()
-                        },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            onInteraction()
-                            com.novabar.app.services.NovaNotificationListener.toggleShuffle()
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(16.dp)) {
-                            val w = size.width
-                            val h = size.height
-                            val stroke = 2.dp.toPx()
-                            
-                            val path1 = Path().apply {
-                                moveTo(0f, h * 0.25f)
-                                lineTo(w * 0.3f, h * 0.25f)
-                                lineTo(w * 0.7f, h * 0.75f)
-                                lineTo(w, h * 0.75f)
-                            }
-                            val path2 = Path().apply {
-                                moveTo(0f, h * 0.75f)
-                                lineTo(w * 0.3f, h * 0.75f)
-                                lineTo(w * 0.7f, h * 0.25f)
-                                lineTo(w, h * 0.25f)
-                            }
-                            
-                            drawPath(
-                                path1, 
-                                color = if (state.isShuffleEnabled) color else color.copy(alpha = 0.5f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
-                            )
-                            drawPath(
-                                path2, 
-                                color = if (state.isShuffleEnabled) color else color.copy(alpha = 0.5f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
-                            )
-                            
-                            val arrowTop = Path().apply {
-                                moveTo(w * 0.82f, h * 0.1f)
-                                lineTo(w, h * 0.25f)
-                                lineTo(w * 0.82f, h * 0.4f)
-                            }
-                            drawPath(
-                                arrowTop,
-                                color = if (state.isShuffleEnabled) color else color.copy(alpha = 0.5f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
-                            )
-                            
-                            val arrowBottom = Path().apply {
-                                moveTo(w * 0.82f, h * 0.6f)
-                                lineTo(w, h * 0.75f)
-                                lineTo(w * 0.82f, h * 0.9f)
-                            }
-                            drawPath(
-                                arrowBottom,
-                                color = if (state.isShuffleEnabled) color else color.copy(alpha = 0.5f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
-                            )
-                        }
-                    }
+                PlaybackSeekBar(
+                    playbackPositionStateFlow = playbackPositionFlow,
+                    duration = state.duration,
+                    color = color,
+                    onSeekTo = onSeekTo,
+                    onInteraction = onInteraction,
+                    controlsAlpha = controlsAlpha,
+                    controlsOffsetY = controlsOffsetY
+                )
 
-                    IconButton(
-                        onClick = {
-                            onInteraction()
-                            com.novabar.app.services.NovaNotificationListener.skipToPrevious()
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(16.dp)) {
-                            val path = Path().apply {
-                                moveTo(size.width * 0.75f, size.height * 0.2f)
-                                lineTo(size.width * 0.3f, size.height * 0.5f)
-                                lineTo(size.width * 0.75f, size.height * 0.8f)
-                                close()
-                            }
-                            drawPath(path, color)
-                            drawRect(color, Offset(size.width * 0.15f, size.height * 0.2f), Size(size.width * 0.12f, size.height * 0.6f))
-                        }
-                    }
+                MediaControlsSection(
+                    isPlaying = state.isPlaying,
+                    color = color,
+                    onInteraction = onInteraction,
+                    controlsAlpha = controlsAlpha,
+                    controlsOffsetY = controlsOffsetY
+                )
+            }
+        }
+    }
+}
 
-                    IconButton(
-                        onClick = {
-                            onInteraction()
-                            if (state.isPlaying) {
-                                com.novabar.app.services.NovaNotificationListener.pause()
-                            } else {
-                                com.novabar.app.services.NovaNotificationListener.play()
-                            }
-                        },
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(24.dp)) {
-                            if (state.isPlaying) {
-                                val w = size.width * 0.14f
-                                val gap = size.width * 0.18f
-                                drawRect(color, Offset(size.width * 0.26f, size.height * 0.2f), Size(w, size.height * 0.6f))
-                                drawRect(color, Offset(size.width * 0.26f + w + gap, size.height * 0.2f), Size(w, size.height * 0.6f))
-                            } else {
-                                val path = Path().apply {
-                                    moveTo(size.width * 0.32f, size.height * 0.18f)
-                                    lineTo(size.width * 0.82f, size.height * 0.5f)
-                                    lineTo(size.width * 0.32f, size.height * 0.82f)
-                                    close()
-                                }
-                                drawPath(path, color)
-                            }
-                        }
-                    }
+@Composable
+fun MediaAlbumArtSection(
+    albumArt: Bitmap?,
+    color: Color,
+    albumArtCornerRadius: Int,
+    sizeDp: Int
+) {
+    val hasArt = albumArt != null
+    val artAlpha by animateFloatAsState(
+        targetValue = if (hasArt) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "albumArtAlpha"
+    )
+    
+    Box(
+        modifier = Modifier.size(sizeDp.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!hasArt || artAlpha < 1f) {
+            FallbackArtIcon(color = color, sizeDp = sizeDp)
+        }
+        
+        if (hasArt) {
+            Image(
+                bitmap = albumArt!!.asImageBitmap(),
+                contentDescription = "Album Art",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = artAlpha }
+                    .clip(RoundedCornerShape(albumArtCornerRadius.dp))
+            )
+        }
+    }
+}
 
-                    IconButton(
-                        onClick = {
-                            onInteraction()
-                            com.novabar.app.services.NovaNotificationListener.skipToNext()
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(16.dp)) {
-                            val path = Path().apply {
-                                moveTo(size.width * 0.25f, size.height * 0.2f)
-                                lineTo(size.width * 0.7f, size.height * 0.5f)
-                                lineTo(size.width * 0.25f, size.height * 0.8f)
-                                close()
-                            }
-                            drawPath(path, color)
-                            drawRect(color, Offset(size.width * 0.73f, size.height * 0.2f), Size(size.width * 0.12f, size.height * 0.6f))
-                        }
-                    }
+@Composable
+fun MediaMetadataSection(
+    title: String,
+    artist: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = artist.ifEmpty { "Unknown Artist" },
+            color = color.copy(alpha = 0.7f),
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
 
-                    val context = LocalContext.current
-                    IconButton(
-                        onClick = {
-                            onInteraction()
-                            com.novabar.app.services.NovaNotificationListener.showOutputSwitcher(context)
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(16.dp)) {
-                            val w = size.width
-                            val h = size.height
-                            val path = Path().apply {
-                                moveTo(w * 0.35f, h * 0.35f)
-                                lineTo(w * 0.15f, h * 0.35f)
-                                lineTo(w * 0.15f, h * 0.65f)
-                                lineTo(w * 0.35f, h * 0.65f)
-                                lineTo(w * 0.65f, h * 0.85f)
-                                lineTo(w * 0.65f, h * 0.15f)
-                                close()
-                            }
-                            drawPath(path, color.copy(alpha = 0.7f))
-                            drawArc(
-                                color = color.copy(alpha = 0.7f),
-                                startAngle = -45f,
-                                sweepAngle = 90f,
-                                useCenter = false,
-                                topLeft = Offset(w * 0.3f, h * 0.15f),
-                                size = Size(w * 0.6f, h * 0.7f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx())
-                            )
+@Composable
+fun MediaVisualizerSection(
+    style: String,
+    sensitivity: Float,
+    isPlaying: Boolean,
+    color: Color,
+    widthDp: Int,
+    heightDp: Int,
+    paddingHorizontalDp: Int = 0
+) {
+    AudioVisualizer(
+        style = style,
+        sensitivity = sensitivity,
+        isPlaying = isPlaying,
+        color = color,
+        modifier = Modifier
+            .width(widthDp.dp)
+            .height(heightDp.dp)
+            .padding(horizontal = paddingHorizontalDp.dp)
+    )
+}
+
+@Composable
+fun MediaAppIconSection(
+    appIcon: Drawable?
+) {
+    val appIconBitmap = remember(appIcon) {
+        drawableToBitmap(appIcon)?.asImageBitmap()
+    }
+    if (appIconBitmap != null) {
+        Image(
+            bitmap = appIconBitmap,
+            contentDescription = "App Icon",
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+        )
+    }
+}
+
+@Composable
+fun MediaControlsSection(
+    isPlaying: Boolean,
+    color: Color,
+    onInteraction: () -> Unit,
+    controlsAlpha: Float,
+    controlsOffsetY: androidx.compose.ui.unit.Dp
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .graphicsLayer {
+                alpha = controlsAlpha
+                translationY = controlsOffsetY.toPx()
+            },
+        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val prevInteraction = remember { MutableInteractionSource() }
+        val isPrevPressed by prevInteraction.collectIsPressedAsState()
+        val prevScale by animateFloatAsState(if (isPrevPressed) 0.90f else 1f, label = "PrevScale")
+
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.1f))
+                .graphicsLayer {
+                    scaleX = prevScale
+                    scaleY = prevScale
+                }
+                .clickable(
+                    interactionSource = prevInteraction,
+                    indication = androidx.compose.foundation.LocalIndication.current,
+                    onClick = {
+                        onInteraction()
+                        com.novabar.app.services.NovaNotificationListener.skipToPrevious()
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(16.dp)) {
+                val path = Path().apply {
+                    moveTo(size.width * 0.75f, size.height * 0.2f)
+                    lineTo(size.width * 0.3f, size.height * 0.5f)
+                    lineTo(size.width * 0.75f, size.height * 0.8f)
+                    close()
+                }
+                drawPath(path, color)
+                drawRect(color, Offset(size.width * 0.15f, size.height * 0.2f), Size(size.width * 0.12f, size.height * 0.6f))
+            }
+        }
+
+        val playPauseInteraction = remember { MutableInteractionSource() }
+        val isPlayPausePressed by playPauseInteraction.collectIsPressedAsState()
+        val playPauseScale by animateFloatAsState(if (isPlayPausePressed) 0.90f else 1f, label = "PlayPauseScale")
+
+        val playPauseBgColor = color
+        val playPauseIconColor = if (color.luminance() > 0.5f) Color(0xFF1C1C1E) else Color.White
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(playPauseBgColor)
+                .graphicsLayer {
+                    scaleX = playPauseScale
+                    scaleY = playPauseScale
+                }
+                .clickable(
+                    interactionSource = playPauseInteraction,
+                    indication = androidx.compose.foundation.LocalIndication.current,
+                    onClick = {
+                        onInteraction()
+                        if (isPlaying) {
+                            com.novabar.app.services.NovaNotificationListener.pause()
+                        } else {
+                            com.novabar.app.services.NovaNotificationListener.play()
                         }
                     }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(24.dp)) {
+                if (isPlaying) {
+                    val w = size.width * 0.14f
+                    val gap = size.width * 0.18f
+                    drawRect(playPauseIconColor, Offset(size.width * 0.26f, size.height * 0.2f), Size(w, size.height * 0.6f))
+                    drawRect(playPauseIconColor, Offset(size.width * 0.26f + w + gap, size.height * 0.2f), Size(w, size.height * 0.6f))
+                } else {
+                    val path = Path().apply {
+                        moveTo(size.width * 0.32f, size.height * 0.18f)
+                        lineTo(size.width * 0.82f, size.height * 0.5f)
+                        lineTo(size.width * 0.32f, size.height * 0.82f)
+                        close()
+                    }
+                    drawPath(path, playPauseIconColor)
                 }
             }
         }
+
+        val nextInteraction = remember { MutableInteractionSource() }
+        val isNextPressed by nextInteraction.collectIsPressedAsState()
+        val nextScale by animateFloatAsState(if (isNextPressed) 0.90f else 1f, label = "NextScale")
+
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.1f))
+                .graphicsLayer {
+                    scaleX = nextScale
+                    scaleY = nextScale
+                }
+                .clickable(
+                    interactionSource = nextInteraction,
+                    indication = androidx.compose.foundation.LocalIndication.current,
+                    onClick = {
+                        onInteraction()
+                        com.novabar.app.services.NovaNotificationListener.skipToNext()
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(16.dp)) {
+                val path = Path().apply {
+                    moveTo(size.width * 0.25f, size.height * 0.2f)
+                    lineTo(size.width * 0.7f, size.height * 0.5f)
+                    lineTo(size.width * 0.25f, size.height * 0.8f)
+                    close()
+                }
+                drawPath(path, color)
+                drawRect(color, Offset(size.width * 0.73f, size.height * 0.2f), Size(size.width * 0.12f, size.height * 0.6f))
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaybackSeekBar(
+    playbackPositionStateFlow: kotlinx.coroutines.flow.StateFlow<Long>,
+    duration: Long,
+    color: Color,
+    onSeekTo: (Long) -> Unit,
+    onInteraction: () -> Unit,
+    controlsAlpha: Float = 1f,
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp
+) {
+    val currentPosition by playbackPositionStateFlow.collectAsState()
+    var dragPosition by remember { mutableStateOf<Float?>(null) }
+    
+    val displayPositionMs = if (dragPosition != null) {
+        (dragPosition!! * duration).toLong()
+    } else {
+        currentPosition
+    }
+
+    val sliderProgress = if (duration > 0) {
+        (displayPositionMs.toFloat() / duration).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .graphicsLayer {
+                alpha = controlsAlpha
+                translationY = controlsOffsetY.toPx()
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = formatTime(displayPositionMs),
+            color = color.copy(alpha = 0.6f),
+            fontSize = 10.sp
+        )
+        Slider(
+            value = sliderProgress,
+            onValueChange = {
+                onInteraction()
+                dragPosition = it
+            },
+            onValueChangeFinished = {
+                val seekMs = (sliderProgress * duration).toLong()
+                onSeekTo(seekMs)
+                dragPosition = null
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = color,
+                activeTrackColor = color,
+                inactiveTrackColor = color.copy(alpha = 0.2f)
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .height(18.dp)
+        )
+        Text(
+            text = formatTime(duration),
+            color = color.copy(alpha = 0.6f),
+            fontSize = 10.sp
+        )
     }
 }

@@ -164,6 +164,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         repository.updateShowSeconds(show)
     }
 
+    fun setShowOnLockscreen(show: Boolean) = viewModelScope.launch {
+        repository.updateShowOnLockscreen(show)
+    }
+
     fun addAllowedPackage(pkg: String) = viewModelScope.launch {
         repository.addAllowedPackage(pkg)
     }

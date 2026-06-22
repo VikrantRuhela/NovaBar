@@ -21,13 +21,20 @@ data class TimerState(
     val isRunning: Boolean = false,
     val durationMs: Long = 0L,
     val remainingMs: Long = 0L,
-    val label: String = ""
+    val label: String = "",
+    val hasPause: Boolean = false,
+    val hasResume: Boolean = false,
+    val hasReset: Boolean = false
 )
 
 data class StopwatchState(
     val isRunning: Boolean = false,
-    val elapsedMs: Long = 0L
+    val elapsedMs: Long = 0L,
+    val hasPause: Boolean = false,
+    val hasResume: Boolean = false,
+    val hasLap: Boolean = false
 )
+
 
 data class NavigationState(
     val maneuverInstruction: String = "",

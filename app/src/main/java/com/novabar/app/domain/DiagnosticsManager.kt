@@ -3,6 +3,9 @@ package com.novabar.app.domain
 import kotlinx.coroutines.flow.MutableStateFlow
 
 object DiagnosticsManager {
+    @Volatile
+    var expandClickTime = 0L
+
     // GENERAL SECTION
     val overlayEngine = MutableStateFlow("Unknown")
     val windowType = MutableStateFlow("Unknown")
@@ -45,6 +48,9 @@ object DiagnosticsManager {
     val currentOverlayBounds = MutableStateFlow("0, 0, 0, 0")
     val currentPriorityActivity = MutableStateFlow("None")
     val resetTrigger = MutableStateFlow(0)
+    val windowX = MutableStateFlow(0)
+    val windowY = MutableStateFlow(0)
+    val showDebugMarkers = MutableStateFlow(false)
 
     fun incrementTouchEvents() {
         touchEventsReceived.value += 1

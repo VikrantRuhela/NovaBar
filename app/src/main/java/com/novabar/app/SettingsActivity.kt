@@ -15,6 +15,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,9 +79,18 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     )
     val settings by viewModel.settingsFlow.collectAsState()
 
+
     val hasOverlayPermission = remember { mutableStateOf(false) }
     val hasNotificationPermission = remember { mutableStateOf(false) }
     val hasAccessibilityPermission = remember { mutableStateOf(false) }
+    val hasPhonePermission = remember { mutableStateOf(false) }
+    var permissionsExpanded by remember { mutableStateOf(false) }
+
+    val requestPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasPhonePermission.value = isGranted
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -87,6 +99,10 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 hasOverlayPermission.value = Settings.canDrawOverlays(context)
                 hasNotificationPermission.value = isNotificationServiceEnabled(context)
                 hasAccessibilityPermission.value = isAccessibilityServiceEnabled(context)
+                hasPhonePermission.value = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.ANSWER_PHONE_CALLS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
                 // If overlay is enabled and permissions are granted, start/update service
                 if (settings.isEnabled && hasOverlayPermission.value) {
@@ -114,42 +130,99 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // --- 1. PERMISSIONS SYSTEM ---
-        Text("Permissions Status", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val grantedCount = (if (hasAccessibilityPermission.value) 1 else 0) +
+                                   (if (hasNotificationPermission.value) 1 else 0) +
+                                   (if (hasOverlayPermission.value) 1 else 0) +
+                                   (if (hasPhonePermission.value) 1 else 0)
 
-        PermissionCard(
-            title = "Display Overlay Permission",
-            description = "Required to show the floating capsule bar over other apps.",
-            isGranted = hasOverlayPermission.value,
-            onRequest = {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:${context.packageName}")
-                )
-                context.startActivity(intent)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { permissionsExpanded = !permissionsExpanded },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Permissions ($grantedCount/4)",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    ) {
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (hasAccessibilityPermission.value) Color(0xFF4CAF50) else Color(0xFFF44336)))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (hasNotificationPermission.value) Color(0xFF4CAF50) else Color(0xFFF44336)))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (hasOverlayPermission.value) Color(0xFF4CAF50) else Color(0xFFF44336)))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (hasPhonePermission.value) Color(0xFF4CAF50) else Color(0xFFF44336)))
+                    }
+                    Text(
+                        text = if (permissionsExpanded) "▲" else "▼",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                if (permissionsExpanded) {
+                    Divider()
+                    
+                    PermissionCard(
+                        title = "Display Overlay Permission",
+                        description = "Required to show the floating capsule bar over other apps.",
+                        isGranted = hasOverlayPermission.value,
+                        onRequest = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
+                    )
+
+                    PermissionCard(
+                        title = "Notification & Media Listener Access",
+                        description = "Allows reading playing media sessions and incoming clock timers or navigation.",
+                        isGranted = hasNotificationPermission.value,
+                        onRequest = {
+                            val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                            context.startActivity(intent)
+                        }
+                    )
+
+                    PermissionCard(
+                        title = "Accessibility Color Adapter Service",
+                        description = "Enables content-aware status bar luminance calculations under the pill.",
+                        isGranted = hasAccessibilityPermission.value,
+                        onRequest = {
+                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            context.startActivity(intent)
+                        }
+                    )
+
+                    PermissionCard(
+                        title = "Phone Call Control Permission",
+                        description = "Required to answer/end system phone calls using TelecomManager directly.",
+                        isGranted = hasPhonePermission.value,
+                        onRequest = {
+                            requestPermissionLauncher.launch(android.Manifest.permission.ANSWER_PHONE_CALLS)
+                        }
+                    )
+                }
             }
-        )
-
-        PermissionCard(
-            title = "Notification & Media Listener Access",
-            description = "Allows reading playing media sessions and incoming clock timers or navigation.",
-            isGranted = hasNotificationPermission.value,
-            onRequest = {
-                val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                context.startActivity(intent)
-            }
-        )
-
-        PermissionCard(
-            title = "Accessibility Color Adapter Service",
-            description = "Enables content-aware status bar luminance calculations under the pill.",
-            isGranted = hasAccessibilityPermission.value,
-            onRequest = {
-                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                context.startActivity(intent)
-            }
-        )
-
-        Divider()
+        }
 
         // --- 2. MAIN SWITCH ---
         Card(
@@ -259,17 +332,10 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         )
 
         SliderSetting(
-            title = "Glass Opacity: ${(settings.opacity * 100).toInt()}%",
+            title = "Transparency: ${(settings.opacity * 100).toInt()}%",
             value = settings.opacity,
             valueRange = 0.2f..1.0f,
             onValueChange = { viewModel.setOpacity(it) }
-        )
-
-        SliderSetting(
-            title = "Blur Intensity: ${settings.blurRadius}px",
-            value = settings.blurRadius.toFloat(),
-            valueRange = 5f..50f,
-            onValueChange = { viewModel.setBlurRadius(it.toInt()) }
         )
 
         SliderSetting(
@@ -511,6 +577,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         )
 
         ToggleSetting(
+            title = "Show on Lockscreen",
+            description = "Display the floating capsule bar overlay on the lockscreen.",
+            checked = settings.showOnLockscreen,
+            onCheckedChange = { viewModel.setShowOnLockscreen(it) }
+        )
+
+        ToggleSetting(
             title = "Always On Bar",
             description = "Show a minimal clock/battery capsule when no activities are active.",
             checked = settings.alwaysOnBar,
@@ -641,6 +714,26 @@ fun PermissionCard(
 }
 
 @Composable
+fun PermissionIndicator(label: String, isGranted: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (isGranted) Color(0xFF4CAF50) else Color(0xFFF44336))
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+        )
+    }
+}
+
+@Composable
 fun SliderSetting(
     title: String,
     value: Float,
@@ -701,7 +794,7 @@ private fun isAccessibilityServiceEnabled(context: Context): Boolean {
 // Custom String exporter/importer representation
 private fun exportSettings(s: NovaSettings): String {
     val pkgs = s.allowedNotificationPackages.joinToString("|")
-    return "NovaBarSettingsV4:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds}"
+    return "NovaBarSettingsV4:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen}"
 }
 
 private fun importSettings(str: String): NovaSettings? {
@@ -742,7 +835,8 @@ private fun importSettings(str: String): NovaSettings? {
                 alwaysOnBar = parts[29].toBoolean(),
                 alwaysOnConfig = parts[30],
                 timeFormat = parts[31],
-                showSeconds = parts[32].toBoolean()
+                showSeconds = parts[32].toBoolean(),
+                showOnLockscreen = if (parts.size > 33) parts[33].toBoolean() else true
             )
         } else if (str.startsWith("NovaBarSettingsV3:")) {
             val parts = str.substringAfter("NovaBarSettingsV3:").split(",")
@@ -835,6 +929,10 @@ fun DiagnosticsDashboard(
     hasOverlayPermission: Boolean
 ) {
     var showDashboard by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showDashboard) {
+        com.novabar.app.domain.DiagnosticsManager.showDebugMarkers.value = showDashboard
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
