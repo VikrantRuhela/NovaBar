@@ -39,7 +39,7 @@ data class NovaSettings(
     val offsetY: Int = 0, // dp
     val showWhenIdle: Boolean = true,
 
-    // NOW BAR STATE SYSTEM SETTINGS:
+    // NOVA BAR STATE SYSTEM SETTINGS:
     val defaultPresentationMode: String = "Compact", // "Minimized", "Compact"
     val visualizerStyle: String = "Waveform", // "Waveform", "Pulse", "Minimal"
     val visualizerSensitivity: Float = 1.0f,

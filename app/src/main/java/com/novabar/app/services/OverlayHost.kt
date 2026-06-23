@@ -185,7 +185,7 @@ class OverlayHost(private val context: Context) {
                     NovaBarUi()
                 }
                 addOnComputeInternalInsetsListenerReflection(this) { region ->
-                    val isSplit = settings.cameraCutoutMode && com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value && 
+                    val isSplit = settings.cameraCutoutMode && 
                             (OverlayStateManager.windowMode.value == "Compact" || OverlayStateManager.windowMode.value == "Minimized")
                     if (isSplit) {
                         region.setEmpty()

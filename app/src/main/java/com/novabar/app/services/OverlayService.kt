@@ -109,8 +109,8 @@ class OverlayService : Service() {
         }
 
         val notification = builder
-            .setContentTitle("Nova Bar Active")
-            .setContentText("Samsung Now Bar overlay is running")
+            .setContentTitle("Nova Bar")
+            .setContentText("Nova Bar is running")
             .setSmallIcon(android.R.drawable.sym_def_app_icon)
             .build()
 

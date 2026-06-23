@@ -465,17 +465,21 @@ fun NovaBarUi() {
         DiagnosticsManager.cameraCutoutModeEnabled.value = settings.cameraCutoutMode
     }
 
-    // Cutout checks
     val cameraCutoutModeEnabled = settings.cameraCutoutMode
     val hasCenteredPunchHole by com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.collectAsState()
     
-    val isSplitLayout = cameraCutoutModeEnabled && hasCenteredPunchHole && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT)
+    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT)
     
     val density = LocalContext.current.resources.displayMetrics.density
     val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.collectAsState().value
     val cutoutWidthDp = (cutoutWidthPx / density).dp
     val safetyPadding = 12.dp
-    val gapWidth = (cutoutWidthDp + safetyPadding) * settings.cameraCutoutGapScale
+    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
+        cutoutWidthDp + safetyPadding
+    } else {
+        36.dp
+    }
+    val gapWidth = baseGap * settings.cameraCutoutGapScale
 
     LaunchedEffect(settings.cameraCutoutGapScale, gapWidth) {
         DiagnosticsManager.cutoutGapScale.value = settings.cameraCutoutGapScale

@@ -246,7 +246,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             ) {
                 Column {
                     Text("Enable Nova Bar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Enable/disable floating now bar overlay", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                    Text("Enable/disable floating Nova Bar overlay", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
                 }
                 Switch(
                     checked = settings.isEnabled,
@@ -276,23 +276,20 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         // --- 3. CUSTOMIZATION SLIDERS ---
         Text("Visual Customizations", fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
-        val hasDisplayCutout by com.novabar.app.utils.CutoutManager.hasDisplayCutout.collectAsState()
-        if (hasDisplayCutout) {
-            ToggleSetting(
-                title = "Camera Cutout Layout",
-                description = "Split Nova Bar around centered punch-hole cameras.",
-                checked = settings.cameraCutoutMode,
-                onCheckedChange = { viewModel.setCameraCutoutMode(it) }
+        ToggleSetting(
+            title = "Camera Cutout Layout",
+            description = "Split Nova Bar around centered punch-hole cameras.",
+            checked = settings.cameraCutoutMode,
+            onCheckedChange = { viewModel.setCameraCutoutMode(it) }
+        )
+        if (settings.cameraCutoutMode) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SliderSetting(
+                title = "Camera Cutout Size: ${String.format(java.util.Locale.US, "%.1fx", settings.cameraCutoutGapScale)}",
+                value = settings.cameraCutoutGapScale,
+                valueRange = 0.7f..2.0f,
+                onValueChange = { viewModel.setCameraCutoutGapScale(it) }
             )
-            if (settings.cameraCutoutMode) {
-                Spacer(modifier = Modifier.height(8.dp))
-                SliderSetting(
-                    title = "Camera Cutout Size: ${String.format(java.util.Locale.US, "%.1fx", settings.cameraCutoutGapScale)}",
-                    value = settings.cameraCutoutGapScale,
-                    valueRange = 0.7f..2.0f,
-                    onValueChange = { viewModel.setCameraCutoutGapScale(it) }
-                )
-            }
         }
 
         SliderSetting(
@@ -374,7 +371,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         Divider()
 
         // --- Now Bar State & Visualizer Settings ---
-        Text("Now Bar State & Visualizer Settings", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Nova Bar State & Visualizer Settings", fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
         Text("Default Presentation Mode", fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Row(
