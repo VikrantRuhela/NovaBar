@@ -255,6 +255,7 @@ class OverlayHost(private val context: Context) {
             visibilityProvider = provider
             scope?.launch {
                 provider.isStatusBarVisible.collect { visible ->
+                    Log.d("OverlayHost", "DIAG_LOG: SystemBarVisibilityProvider emitted isStatusBarVisible = $visible -> Updating OverlayStateManager.systemBarVisible")
                     OverlayStateManager.systemBarVisible.value = visible
                 }
             }

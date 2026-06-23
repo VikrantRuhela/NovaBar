@@ -16,7 +16,11 @@ class SystemBarVisibilityProvider(private val context: Context, private val view
 
     private val onApplyWindowInsetsListener = androidx.core.view.OnApplyWindowInsetsListener { _, insets ->
         val visible = insets.isVisible(WindowInsetsCompat.Type.statusBars())
-        Log.d(TAG, "WindowInsets status bar visibility change: $visible")
+        val navVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+        val sysVisible = insets.isVisible(WindowInsetsCompat.Type.systemBars())
+        Log.d(TAG, "DIAG_LOG: WindowInsets callback invoked. insets=$insets, statusBarsVisible=$visible, navigationBarsVisible=$navVisible, systemBarsVisible=$sysVisible")
+        
+        Log.d(TAG, "DIAG_LOG: SystemBarVisibilityProvider emitting _isStatusBarVisible = $visible (from WindowInsets callback)")
         _isStatusBarVisible.value = visible
         
         // Also call CutoutManager
@@ -27,37 +31,53 @@ class SystemBarVisibilityProvider(private val context: Context, private val view
     }
 
     private val onSystemUiVisibilityChangeListener = View.OnSystemUiVisibilityChangeListener { visibility ->
-        val hidden = (visibility and View.SYSTEM_UI_FLAG_FULLSCREEN) != 0 ||
-                (visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0 ||
-                (visibility and View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0
-        Log.d(TAG, "Legacy SystemUiVisibility change flags: $visibility -> isVisible: ${!hidden}")
+        val fullScreen = (visibility and View.SYSTEM_UI_FLAG_FULLSCREEN) != 0
+        val hideNav = (visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0
+        val immersiveSticky = (visibility and View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0
+        val hidden = fullScreen || hideNav || immersiveSticky
+        Log.d(TAG, "DIAG_LOG: Legacy SystemUiVisibility callback invoked. flags=$visibility (fullScreen=$fullScreen, hideNav=$hideNav, immersiveSticky=$immersiveSticky) -> isVisible=${!hidden}")
+        
+        Log.d(TAG, "DIAG_LOG: SystemBarVisibilityProvider emitting _isStatusBarVisible = ${!hidden} (from Legacy callback)")
         _isStatusBarVisible.value = !hidden
     }
 
     fun start() {
+        Log.d(TAG, "DIAG_LOG: SystemBarVisibilityProvider start() called on view: $view")
+        
         // Primary: WindowInsetsCompat
         ViewCompat.setOnApplyWindowInsetsListener(view, onApplyWindowInsetsListener)
+        Log.d(TAG, "DIAG_LOG: Registered WindowInsets listener")
 
         // Fallback: OnSystemUiVisibilityChangeListener
         view.setOnSystemUiVisibilityChangeListener(onSystemUiVisibilityChangeListener)
+        Log.d(TAG, "DIAG_LOG: Registered Legacy SystemUiVisibility change listener")
 
         // Initial check
         val currentVisibility = view.systemUiVisibility
-        val hidden = (currentVisibility and View.SYSTEM_UI_FLAG_FULLSCREEN) != 0 ||
-                (currentVisibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0 ||
-                (currentVisibility and View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0
+        val fullScreen = (currentVisibility and View.SYSTEM_UI_FLAG_FULLSCREEN) != 0
+        val hideNav = (currentVisibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0
+        val immersiveSticky = (currentVisibility and View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0
+        val hidden = fullScreen || hideNav || immersiveSticky
+        Log.d(TAG, "DIAG_LOG: Initial systemUiVisibility=$currentVisibility (fullScreen=$fullScreen, hideNav=$hideNav, immersiveSticky=$immersiveSticky)")
+        
         if (hidden) {
+            Log.d(TAG, "DIAG_LOG: SystemBarVisibilityProvider emitting _isStatusBarVisible = false (initial legacy check)")
             _isStatusBarVisible.value = false
         } else {
             val rootInsets = ViewCompat.getRootWindowInsets(view)
+            Log.d(TAG, "DIAG_LOG: Initial rootInsets=$rootInsets")
             if (rootInsets != null) {
-                _isStatusBarVisible.value = rootInsets.isVisible(WindowInsetsCompat.Type.statusBars())
+                val visible = rootInsets.isVisible(WindowInsetsCompat.Type.statusBars())
+                Log.d(TAG, "DIAG_LOG: SystemBarVisibilityProvider emitting _isStatusBarVisible = $visible (initial rootInsets check)")
+                _isStatusBarVisible.value = visible
             }
         }
     }
 
     fun stop() {
+        Log.d(TAG, "DIAG_LOG: SystemBarVisibilityProvider stop() called")
         ViewCompat.setOnApplyWindowInsetsListener(view, null)
         view.setOnSystemUiVisibilityChangeListener(null)
     }
 }
+
