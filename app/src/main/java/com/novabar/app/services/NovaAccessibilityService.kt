@@ -9,6 +9,8 @@ import android.view.Display
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
+import android.graphics.Rect
 import androidx.core.graphics.ColorUtils
 import com.novabar.app.data.SettingsRepository
 import com.novabar.app.data.NovaSettings
@@ -101,6 +103,13 @@ class NovaAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: "Unknown"
         DiagnosticsManager.lastAccessibilityEvent.value = "$eventTypeStr (pkg=$pkg)"
         
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            
+            // Run prototype diagnostics logging on interactive windows
+            diagnoseInteractiveWindows(eventTypeStr)
+        }
+        
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             DiagnosticsManager.accessibilityForegroundPackage.value = pkg
             DiagnosticsManager.currentActivity.value = pkg
@@ -110,6 +119,46 @@ class NovaAccessibilityService : AccessibilityService() {
                     analyzeBackgroundLuminance()
                 }
             }
+        }
+    }
+
+    private fun diagnoseInteractiveWindows(eventType: String) {
+        val windowsList = try {
+            windows
+        } catch (e: Exception) {
+            Log.e(tag, "DIAG_LOG: Failed to query windows from accessibility service: ${e.message}")
+            null
+        }
+        
+        Log.d("SystemBarVisibility", "DIAG_LOG: diagnoseInteractiveWindows invoked on event=$eventType. Windows count: ${windowsList?.size ?: "null"}")
+        
+        if (windowsList == null) return
+        
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
+        Log.d("SystemBarVisibility", "DIAG_LOG: Screen dimensions resolved: ${screenWidth}x${screenHeight} px")
+        
+        windowsList.forEachIndexed { index, window ->
+            val bounds = android.graphics.Rect()
+            window.getBoundsInScreen(bounds)
+            
+            val typeStr = when (window.type) {
+                AccessibilityWindowInfo.TYPE_APPLICATION -> "TYPE_APPLICATION"
+                AccessibilityWindowInfo.TYPE_INPUT_METHOD -> "TYPE_INPUT_METHOD"
+                AccessibilityWindowInfo.TYPE_SYSTEM -> "TYPE_SYSTEM"
+                AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY -> "TYPE_ACCESSIBILITY_OVERLAY"
+                AccessibilityWindowInfo.TYPE_SPLIT_SCREEN_DIVIDER -> "TYPE_SPLIT_SCREEN_DIVIDER"
+                else -> "UNKNOWN (${window.type})"
+            }
+            
+            val titleStr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                window.title?.toString() ?: "No Title"
+            } else {
+                "Title API >= 24 only"
+            }
+            
+            Log.d("SystemBarVisibility", "DIAG_LOG: Window [#$index] -> Type: $typeStr, Bounds: $bounds, Active: ${window.isActive}, Focused: ${window.isFocused}, Title: $titleStr, Layer: ${window.layer}")
         }
     }
 
