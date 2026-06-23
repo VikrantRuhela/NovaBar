@@ -184,6 +184,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         repository.updateCameraCutoutMode(enabled)
     }
 
+    fun setCameraCutoutGapScale(scale: Float) = viewModelScope.launch {
+        repository.updateCameraCutoutGapScale(scale)
+    }
+
     fun setOverlayEngine(engine: OverlayEngine) = viewModelScope.launch {
         repository.updateOverlayEngine(engine)
     }

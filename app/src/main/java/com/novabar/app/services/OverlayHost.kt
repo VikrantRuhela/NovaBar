@@ -177,6 +177,10 @@ class OverlayHost(private val context: Context) {
 
             val view = ComposeView(context).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setOnApplyWindowInsetsListener { _, insets ->
+                    com.novabar.app.utils.CutoutManager.detectCutout(context, insets)
+                    insets
+                }
                 setContent {
                     NovaBarUi()
                 }

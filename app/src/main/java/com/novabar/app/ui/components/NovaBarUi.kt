@@ -475,7 +475,12 @@ fun NovaBarUi() {
     val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.collectAsState().value
     val cutoutWidthDp = (cutoutWidthPx / density).dp
     val safetyPadding = 12.dp
-    val gapWidth = cutoutWidthDp + safetyPadding
+    val gapWidth = (cutoutWidthDp + safetyPadding) * settings.cameraCutoutGapScale
+
+    LaunchedEffect(settings.cameraCutoutGapScale, gapWidth) {
+        DiagnosticsManager.cutoutGapScale.value = settings.cameraCutoutGapScale
+        DiagnosticsManager.finalGapWidth.value = (gapWidth.value * density).roundToInt()
+    }
 
     val showDebug by DiagnosticsManager.showDebugMarkers.collectAsState()
     val winX by DiagnosticsManager.windowX.collectAsState()

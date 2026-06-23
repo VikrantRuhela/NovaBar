@@ -16,11 +16,11 @@ object CutoutManager {
     val cutoutWidth = MutableStateFlow(0) // in px
     val cutoutHeight = MutableStateFlow(0) // in px
 
-    fun detectCutout(context: Context) {
+    fun detectCutout(context: Context, customInsets: android.view.WindowInsets? = null) {
         try {
             val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val metrics = windowManager.currentWindowMetrics
-            val insets = metrics.windowInsets
+            val insets = customInsets ?: metrics.windowInsets
             
             // Check for display cutout
             val cutout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {

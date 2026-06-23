@@ -54,7 +54,8 @@ data class NovaSettings(
     val showSeconds: Boolean = false,
     val showOnLockscreen: Boolean = true,
     val overlayEngine: OverlayEngine = OverlayEngine.APPLICATION,
-    val cameraCutoutMode: Boolean = false
+    val cameraCutoutMode: Boolean = false,
+    val cameraCutoutGapScale: Float = 1.0f
 )
 
 class SettingsRepository(private val context: Context) {
@@ -100,6 +101,7 @@ class SettingsRepository(private val context: Context) {
         private val SHOW_ON_LOCKSCREEN = booleanPreferencesKey("show_on_lockscreen")
         private val OVERLAY_ENGINE = stringPreferencesKey("overlay_engine")
         private val CAMERA_CUTOUT_MODE = booleanPreferencesKey("camera_cutout_mode")
+        private val CAMERA_CUTOUT_GAP_SCALE = floatPreferencesKey("camera_cutout_gap_scale")
     }
 
     val settingsFlow: Flow<NovaSettings> = context.dataStore.data.map { preferences ->
@@ -144,7 +146,8 @@ class SettingsRepository(private val context: Context) {
                 "accessibility" -> OverlayEngine.ACCESSIBILITY
                 else -> OverlayEngine.APPLICATION
             },
-            cameraCutoutMode = preferences[CAMERA_CUTOUT_MODE] ?: false
+            cameraCutoutMode = preferences[CAMERA_CUTOUT_MODE] ?: false,
+            cameraCutoutGapScale = preferences[CAMERA_CUTOUT_GAP_SCALE] ?: 1.0f
         )
     }
 
@@ -313,6 +316,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[CAMERA_CUTOUT_MODE] = enabled }
     }
 
+    suspend fun updateCameraCutoutGapScale(scale: Float) {
+        context.dataStore.edit { it[CAMERA_CUTOUT_GAP_SCALE] = scale }
+    }
+
     suspend fun importSettings(s: NovaSettings) {
         context.dataStore.edit { preferences ->
             preferences[IS_ENABLED] = s.isEnabled
@@ -357,6 +364,7 @@ class SettingsRepository(private val context: Context) {
                 OverlayEngine.APPLICATION -> "application"
             }
             preferences[CAMERA_CUTOUT_MODE] = s.cameraCutoutMode
+            preferences[CAMERA_CUTOUT_GAP_SCALE] = s.cameraCutoutGapScale
         }
     }
 }

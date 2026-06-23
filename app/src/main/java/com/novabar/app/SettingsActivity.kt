@@ -49,6 +49,10 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.novabar.app.utils.CutoutManager.detectCutout(this)
+        window.decorView.setOnApplyWindowInsetsListener { _, insets ->
+            com.novabar.app.utils.CutoutManager.detectCutout(this, insets)
+            insets
+        }
         setContent {
             NovaBarTheme {
                 Scaffold(
@@ -280,6 +284,15 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 checked = settings.cameraCutoutMode,
                 onCheckedChange = { viewModel.setCameraCutoutMode(it) }
             )
+            if (settings.cameraCutoutMode) {
+                Spacer(modifier = Modifier.height(8.dp))
+                SliderSetting(
+                    title = "Camera Cutout Size: ${String.format(java.util.Locale.US, "%.1fx", settings.cameraCutoutGapScale)}",
+                    value = settings.cameraCutoutGapScale,
+                    valueRange = 0.7f..2.0f,
+                    onValueChange = { viewModel.setCameraCutoutGapScale(it) }
+                )
+            }
         }
 
         SliderSetting(
@@ -807,7 +820,7 @@ private fun isAccessibilityServiceEnabled(context: Context): Boolean {
 // Custom String exporter/importer representation
 private fun exportSettings(s: NovaSettings): String {
     val pkgs = s.allowedNotificationPackages.joinToString("|")
-    return "NovaBarSettingsV5:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode}"
+    return "NovaBarSettingsV5:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode},${s.cameraCutoutGapScale}"
 }
 
 private fun importSettings(str: String): NovaSettings? {
@@ -850,7 +863,8 @@ private fun importSettings(str: String): NovaSettings? {
                 timeFormat = parts[31],
                 showSeconds = parts[32].toBoolean(),
                 showOnLockscreen = parts[33].toBoolean(),
-                cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false
+                cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false,
+                cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f
             )
         } else if (str.startsWith("NovaBarSettingsV4:")) {
             val parts = str.substringAfter("NovaBarSettingsV4:").split(",")
@@ -1052,6 +1066,8 @@ fun DiagnosticsDashboard(
                 val cutoutWidthDiag by DiagnosticsManager.cutoutWidth.collectAsState()
                 val cutoutCenterXDiag by DiagnosticsManager.cutoutCenterX.collectAsState()
                 val cutoutModeEnabled by DiagnosticsManager.cameraCutoutModeEnabled.collectAsState()
+                val cutoutGapScale by DiagnosticsManager.cutoutGapScale.collectAsState()
+                val finalGapWidth by DiagnosticsManager.finalGapWidth.collectAsState()
 
                 // Display Sections
                 DiagnosticsSection(title = "General Settings") {
@@ -1071,6 +1087,8 @@ fun DiagnosticsDashboard(
                     DiagnosticsRow("Cutout Width", "$cutoutWidthDiag px")
                     DiagnosticsRow("Cutout Center X", "$cutoutCenterXDiag px")
                     DiagnosticsRow("Cutout Mode Enabled", cutoutModeEnabled.toString())
+                    DiagnosticsRow("Cutout Gap Scale", "${String.format(java.util.Locale.US, "%.2f", cutoutGapScale)}x")
+                    DiagnosticsRow("Final Gap Width", "$finalGapWidth px")
                 }
 
                 DiagnosticsSection(title = "Media Playback Status") {

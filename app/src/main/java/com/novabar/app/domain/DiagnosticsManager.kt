@@ -47,6 +47,8 @@ object DiagnosticsManager {
     val cutoutWidth = MutableStateFlow(0)
     val cutoutCenterX = MutableStateFlow(0)
     val cameraCutoutModeEnabled = MutableStateFlow(false)
+    val cutoutGapScale = MutableStateFlow(1.0f)
+    val finalGapWidth = MutableStateFlow(0)
 
     // OVERLAY SECTION
     val overlayVisible = MutableStateFlow(false)
