@@ -252,7 +252,7 @@ Android 12+
 
 * Samsung Galaxy A21s (running on One ui 4)(android 12)
 * Redmi Pad (running on HyperOS 2 port)(android 15)
-* Redmi 14c 5G (running o HyperOS 3)(android 16)
+* Redmi 14c 5G (running on HyperOS 3)(android 16)
 
 Compatibility may vary depending on manufacturer restrictions and battery optimization policies.
 
