@@ -188,6 +188,14 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         repository.updateCameraCutoutGapScale(scale)
     }
 
+    fun setLeftSegmentWidthDp(width: Int) = viewModelScope.launch {
+        repository.updateLeftSegmentWidthDp(width)
+    }
+
+    fun setRightSegmentWidthDp(width: Int) = viewModelScope.launch {
+        repository.updateRightSegmentWidthDp(width)
+    }
+
     fun setOverlayEngine(engine: OverlayEngine) = viewModelScope.launch {
         repository.updateOverlayEngine(engine)
     }

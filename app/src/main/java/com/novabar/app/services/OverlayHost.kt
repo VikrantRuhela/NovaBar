@@ -103,10 +103,24 @@ class OverlayHost(private val context: Context) {
         }
 
         val initialMode = OverlayStateManager.windowMode.value
-        val initialWidthDp = when (initialMode) {
-            "Minimized" -> (115f * settings.barWidthScale).toInt()
-            "Compact" -> (185f * settings.barWidthScale).toInt()
-            else -> 290
+        val initialWidthDp = if (settings.cameraCutoutMode && (initialMode == "Minimized" || initialMode == "Compact")) {
+            val hasCenteredPunchHole = com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value
+            val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.value
+            val cutoutWidthDp = cutoutWidthPx / density
+            val safetyPadding = 12f
+            val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
+                cutoutWidthDp + safetyPadding
+            } else {
+                36f
+            }
+            val targetGap = baseGap * settings.cameraCutoutGapScale
+            (settings.leftSegmentWidthDp + targetGap + settings.rightSegmentWidthDp).toInt()
+        } else {
+            when (initialMode) {
+                "Minimized" -> (115f * settings.barWidthScale).toInt()
+                "Compact" -> (185f * settings.barWidthScale).toInt()
+                else -> 290
+            }
         }
         val initialWidthPx = (initialWidthDp * density).toInt()
         val initialHeightDp = when (initialMode) {
@@ -304,13 +318,41 @@ class OverlayHost(private val context: Context) {
         val targetHeight: Int
         when (mode) {
             "Minimized" -> {
-                val w = (115f * settings.barWidthScale).toInt()
+                val w = if (settings.cameraCutoutMode) {
+                    val hasCenteredPunchHole = com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value
+                    val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.value
+                    val cutoutWidthDp = cutoutWidthPx / density
+                    val safetyPadding = 12f
+                    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
+                        cutoutWidthDp + safetyPadding
+                    } else {
+                        36f
+                    }
+                    val targetGap = baseGap * settings.cameraCutoutGapScale
+                    settings.leftSegmentWidthDp + targetGap + settings.rightSegmentWidthDp
+                } else {
+                    115f * settings.barWidthScale
+                }
                 val h = (38 + settings.barHeightPadding).coerceAtLeast(24)
                 targetWidth = (w * density).toInt()
                 targetHeight = (h * density).toInt()
             }
             "Compact" -> {
-                val w = (185f * settings.barWidthScale).toInt()
+                val w = if (settings.cameraCutoutMode) {
+                    val hasCenteredPunchHole = com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value
+                    val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.value
+                    val cutoutWidthDp = cutoutWidthPx / density
+                    val safetyPadding = 12f
+                    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
+                        cutoutWidthDp + safetyPadding
+                    } else {
+                        36f
+                    }
+                    val targetGap = baseGap * settings.cameraCutoutGapScale
+                    settings.leftSegmentWidthDp + targetGap + settings.rightSegmentWidthDp
+                } else {
+                    185f * settings.barWidthScale
+                }
                 val h = (44 + settings.barHeightPadding).coerceAtLeast(30)
                 targetWidth = (w * density).toInt()
                 targetHeight = (h * density).toInt()

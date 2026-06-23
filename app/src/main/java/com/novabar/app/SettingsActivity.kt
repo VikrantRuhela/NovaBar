@@ -290,6 +290,34 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 valueRange = 0.7f..2.0f,
                 onValueChange = { viewModel.setCameraCutoutGapScale(it) }
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            SliderSetting(
+                title = "Left Segment Width: ${settings.leftSegmentWidthDp}dp",
+                value = settings.leftSegmentWidthDp.toFloat(),
+                valueRange = 60f..240f,
+                onValueChange = { viewModel.setLeftSegmentWidthDp(it.toInt()) }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SliderSetting(
+                title = "Right Segment Width: ${settings.rightSegmentWidthDp}dp",
+                value = settings.rightSegmentWidthDp.toFloat(),
+                valueRange = 60f..240f,
+                onValueChange = { viewModel.setRightSegmentWidthDp(it.toInt()) }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    viewModel.setLeftSegmentWidthDp(120)
+                    viewModel.setRightSegmentWidthDp(120)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Reset Segment Widths")
+            }
         }
 
         SliderSetting(
@@ -817,12 +845,55 @@ private fun isAccessibilityServiceEnabled(context: Context): Boolean {
 // Custom String exporter/importer representation
 private fun exportSettings(s: NovaSettings): String {
     val pkgs = s.allowedNotificationPackages.joinToString("|")
-    return "NovaBarSettingsV5:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode},${s.cameraCutoutGapScale}"
+    return "NovaBarSettingsV6:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode},${s.cameraCutoutGapScale},${s.leftSegmentWidthDp},${s.rightSegmentWidthDp}"
 }
 
 private fun importSettings(str: String): NovaSettings? {
     return try {
-        if (str.startsWith("NovaBarSettingsV5:")) {
+        if (str.startsWith("NovaBarSettingsV6:")) {
+            val parts = str.substringAfter("NovaBarSettingsV6:").split(",")
+            val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
+            NovaSettings(
+                isEnabled = parts[0].toBoolean(),
+                positionY = parts[1].toInt(),
+                cornerRadius = parts[2].toInt(),
+                opacity = parts[3].toFloat(),
+                blurRadius = parts[4].toInt(),
+                animationSpeedMultiplier = parts[5].toFloat(),
+                mediaControlsEnabled = parts[6].toBoolean(),
+                timerEnabled = parts[7].toBoolean(),
+                stopwatchEnabled = parts[8].toBoolean(),
+                navigationEnabled = parts[9].toBoolean(),
+                chargingEnabled = parts[10].toBoolean(),
+                notificationsEnabled = parts[11].toBoolean(),
+                colorAdaptationEnabled = parts[12].toBoolean(),
+                allowedNotificationPackages = pkgs,
+                barWidthScale = parts[14].toFloat(),
+                barHeightPadding = parts[15].toInt(),
+                barBorderThickness = parts[16].toInt(),
+                barGravity = parts[17],
+                offsetX = parts[18].toInt(),
+                offsetY = parts[19].toInt(),
+                showWhenIdle = parts[20].toBoolean(),
+                defaultPresentationMode = parts[21],
+                visualizerStyle = parts[22],
+                visualizerSensitivity = parts[23].toFloat(),
+                albumArtCornerRadius = parts[24].toInt(),
+                progressVisibility = parts[25].toBoolean(),
+                autoCollapseTimeout = parts[26].toInt(),
+                textSize = parts[27],
+                overlayPosition = parts[28],
+                alwaysOnBar = parts[29].toBoolean(),
+                alwaysOnConfig = parts[30],
+                timeFormat = parts[31],
+                showSeconds = parts[32].toBoolean(),
+                showOnLockscreen = parts[33].toBoolean(),
+                cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false,
+                cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f,
+                leftSegmentWidthDp = if (parts.size > 36) parts[36].toInt() else 120,
+                rightSegmentWidthDp = if (parts.size > 37) parts[37].toInt() else 120
+            )
+        } else if (str.startsWith("NovaBarSettingsV5:")) {
             val parts = str.substringAfter("NovaBarSettingsV5:").split(",")
             val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
             NovaSettings(
@@ -861,7 +932,9 @@ private fun importSettings(str: String): NovaSettings? {
                 showSeconds = parts[32].toBoolean(),
                 showOnLockscreen = parts[33].toBoolean(),
                 cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false,
-                cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f
+                cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f,
+                leftSegmentWidthDp = 120,
+                rightSegmentWidthDp = 120
             )
         } else if (str.startsWith("NovaBarSettingsV4:")) {
             val parts = str.substringAfter("NovaBarSettingsV4:").split(",")

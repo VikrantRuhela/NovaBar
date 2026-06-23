@@ -418,26 +418,7 @@ fun NovaBarUi() {
         36.dp
     }
 
-    val minimumSegmentWidth = 56.dp
-    val rightWeight = when (activeStateKey) {
-        "Media" -> 1.5f
-        "Notification", "Navigation" -> 2.0f
-        else -> 1.0f
-    }
-    val leftWeight = 1.0f
-    val totalWeight = leftWeight + rightWeight
-
-    // Calculate minimum required available width to ensure both weighted segments are >= 56.dp
-    val minAvailableWidth = maxOf(
-        minimumSegmentWidth * (totalWeight / leftWeight),
-        minimumSegmentWidth * (totalWeight / rightWeight)
-    )
-
-    // Calculate maximum allowed gap inside the pill to prevent segment collapse
-    val maximumAllowedGap = (baseTargetWidth - minAvailableWidth).coerceAtLeast(0.dp)
-
-    // Clamp the target gap width before animating
-    val targetGap = (baseGap * settings.cameraCutoutGapScale).coerceAtMost(maximumAllowedGap)
+    val targetGap = baseGap * settings.cameraCutoutGapScale
 
     // Gap Animation:
     val gapWidth by animateDpAsState(
@@ -446,7 +427,23 @@ fun NovaBarUi() {
         label = "cameraGap"
     )
 
-    val targetWidth = baseTargetWidth
+    val animatedLeftSegmentWidth by animateDpAsState(
+        targetValue = settings.leftSegmentWidthDp.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "leftSegmentWidth"
+    )
+
+    val animatedRightSegmentWidth by animateDpAsState(
+        targetValue = settings.rightSegmentWidthDp.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "rightSegmentWidth"
+    )
+
+    val targetWidth = if (isSplitLayout) {
+        settings.leftSegmentWidthDp.dp + targetGap + settings.rightSegmentWidthDp.dp
+    } else {
+        baseTargetWidth
+    }
 
     val targetHeight = when (targetState) {
         NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
@@ -812,10 +809,6 @@ fun NovaBarUi() {
                 contentAlignment = Alignment.Center
             ) {
                 if (isSplitLayout) {
-                    val availableWidth = (animatedWidth - gapWidth).coerceAtLeast(0.dp)
-                    val leftSegmentWidth = availableWidth * (leftWeight / totalWeight)
-                    val rightSegmentWidth = availableWidth * (rightWeight / totalWeight)
-
                     Row(
                         modifier = Modifier.fillMaxSize(),
                         verticalAlignment = Alignment.CenterVertically
@@ -823,7 +816,7 @@ fun NovaBarUi() {
                         // Left Content Box
                         Box(
                             modifier = Modifier
-                                .width(leftSegmentWidth)
+                                .width(animatedLeftSegmentWidth)
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.Center
                         ) {
@@ -836,7 +829,7 @@ fun NovaBarUi() {
                         // Right Content Box
                         Box(
                             modifier = Modifier
-                                .width(rightSegmentWidth)
+                                .width(animatedRightSegmentWidth)
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.Center
                         ) {
