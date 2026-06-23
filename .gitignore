@@ -13,3 +13,7 @@ capture.png
 .cxx
 /app/build
 .DS_Store
+
+keystore.properties
+*.jks
+*.keystore

@@ -756,40 +756,16 @@ fun NovaBarUi() {
                                 userInteractionTick = System.currentTimeMillis()
                             }
                         } else {
-                            do {
-                                val event = awaitPointerEvent()
-                                val dragChange = event.changes.firstOrNull { it.id == pointerId }
-                                if (dragChange != null) {
-                                    if (dragChange.pressed) {
-                                        val diffX = dragChange.position.x - dragChange.previousPosition.x
-                                        dragX += diffX
-                                        if (kotlin.math.abs(dragX) > touchSlop) {
-                                            isSwipe = true
-                                        }
-                                        if (isSwipe) {
-                                            dragChange.consume()
-                                        }
-                                    }
+                            // Tap detected!
+                            // Since the finger was already released within 500ms to exit longPressResult,
+                            // we can execute the tap/expand action immediately.
+                            if (activeStateKey != "Idle") {
+                                if (activeStateKey == "Media") {
+                                    DiagnosticsManager.expandClickTime = System.currentTimeMillis()
+                                    Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
                                 }
-                            } while (event.changes.any { it.pressed })
-                            
-                            if (isSwipe) {
-                                if (dragX > 60f) {
-                                    OverlayStateManager.swipeRight()
-                                    userInteractionTick = System.currentTimeMillis()
-                                } else if (dragX < -60f) {
-                                    OverlayStateManager.swipeLeft()
-                                    userInteractionTick = System.currentTimeMillis()
-                                }
-                            } else {
-                                if (activeStateKey != "Idle") {
-                                    if (activeStateKey == "Media") {
-                                        DiagnosticsManager.expandClickTime = System.currentTimeMillis()
-                                        Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
-                                    }
-                                    OverlayStateManager.expand()
-                                    userInteractionTick = System.currentTimeMillis()
-                                }
+                                OverlayStateManager.expand()
+                                userInteractionTick = System.currentTimeMillis()
                             }
                         }
                     }
