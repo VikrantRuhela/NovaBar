@@ -479,7 +479,34 @@ fun NovaBarUi() {
     } else {
         36.dp
     }
-    val gapWidth = baseGap * settings.cameraCutoutGapScale
+    // Safe Segment Width Protection logic:
+    val minimumSegmentWidth = 56.dp
+    val rightWeight = when (activeStateKey) {
+        "Media" -> 1.5f
+        "Notification", "Navigation" -> 2.0f
+        else -> 1.0f
+    }
+    val leftWeight = 1.0f
+    val totalWeight = leftWeight + rightWeight
+
+    // Calculate minimum required available width to ensure both weighted segments are >= 56.dp
+    val minAvailableWidth = maxOf(
+        minimumSegmentWidth * (totalWeight / leftWeight),
+        minimumSegmentWidth * (totalWeight / rightWeight)
+    )
+
+    // The maximum gap width is whatever is left from animatedWidth
+    val maximumAllowedGap = (animatedWidth - minAvailableWidth).coerceAtLeast(0.dp)
+
+    // Clamp the target gap width before animating
+    val targetGapWidth = (baseGap * settings.cameraCutoutGapScale).coerceAtMost(maximumAllowedGap)
+
+    // Gap Animation:
+    val gapWidth by animateDpAsState(
+        targetValue = targetGapWidth,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "gapWidthAnimation"
+    )
 
     LaunchedEffect(settings.cameraCutoutGapScale, gapWidth) {
         DiagnosticsManager.cutoutGapScale.value = settings.cameraCutoutGapScale
@@ -693,7 +720,9 @@ fun NovaBarUi() {
             }
 
             if (isSplitLayout) {
-                val segmentWidth = (animatedWidth - gapWidth) / 2
+                val availableWidth = (animatedWidth - gapWidth).coerceAtLeast(0.dp)
+                val leftSegmentWidth = availableWidth * (leftWeight / totalWeight)
+                val rightSegmentWidth = availableWidth * (rightWeight / totalWeight)
                 Row(
                     modifier = Modifier
                         .width(animatedWidth)
@@ -714,7 +743,7 @@ fun NovaBarUi() {
                     // Left Segment Box
                     Box(
                         modifier = Modifier
-                            .width(segmentWidth)
+                            .width(leftSegmentWidth)
                             .fillMaxHeight()
                             .onGloballyPositioned { coordinates ->
                                 val rect = coordinates.boundsInWindow()
@@ -740,7 +769,7 @@ fun NovaBarUi() {
                     // Right Segment Box
                     Box(
                         modifier = Modifier
-                            .width(segmentWidth)
+                            .width(rightSegmentWidth)
                             .fillMaxHeight()
                             .onGloballyPositioned { coordinates ->
                                 val rect = coordinates.boundsInWindow()
@@ -1329,15 +1358,14 @@ fun NotificationView(
                 }
             }
         } else {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = state.appName,
+                    text = state.title.ifEmpty { state.appName },
                     color = color,
                     fontSize = (if (currentState == NowBarState.MINIMIZED) 11f else 12f + sizeOffset).sp,
                     fontWeight = FontWeight.Bold,
