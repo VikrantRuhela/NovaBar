@@ -40,6 +40,7 @@ object OverlayStateManager {
     // Global expanded state flow
     val isExpanded = MutableStateFlow(false)
     val windowMode = MutableStateFlow("Compact")
+    val systemBarVisible = MutableStateFlow(true)
 
     fun expand() {
         Log.d("NovaBar", "EXPAND_REQUEST")

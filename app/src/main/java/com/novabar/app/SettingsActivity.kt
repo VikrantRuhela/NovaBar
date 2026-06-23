@@ -42,6 +42,12 @@ import com.novabar.app.services.NovaAccessibilityService
 import com.novabar.app.services.NovaNotificationListener
 import com.novabar.app.services.OverlayService
 import com.novabar.app.ui.theme.NovaBarTheme
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class SettingsActivity : ComponentActivity() {
 
@@ -90,6 +96,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     val hasAccessibilityPermission = remember { mutableStateOf(false) }
     val hasPhonePermission = remember { mutableStateOf(false) }
     var permissionsExpanded by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
 
     val requestPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -240,6 +247,41 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .pointerInput(settings.isEnabled) {
+                        coroutineScope {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val down = awaitFirstDown()
+                                    var isLongPress = false
+                                    val longPressJob = this@coroutineScope.launch {
+                                        delay(900)
+                                        isLongPress = true
+                                        showDiagnosticsDialog = true
+                                    }
+                                    val up = waitForUpOrCancellation()
+                                    longPressJob.cancel()
+                                    if (up != null && !isLongPress) {
+                                        val checked = !settings.isEnabled
+                                        viewModel.setEnabled(checked)
+                                        val intent = Intent(context, OverlayService::class.java)
+                                        if (checked) {
+                                            if (hasOverlayPermission.value) {
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                    context.startForegroundService(intent)
+                                                } else {
+                                                    context.startService(intent)
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "Please grant Overlay Permission first", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            context.stopService(intent)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -250,23 +292,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 }
                 Switch(
                     checked = settings.isEnabled,
-                    onCheckedChange = { checked ->
-                        viewModel.setEnabled(checked)
-                        val intent = Intent(context, OverlayService::class.java)
-                        if (checked) {
-                            if (hasOverlayPermission.value) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    context.startForegroundService(intent)
-                                } else {
-                                    context.startService(intent)
-                                }
-                            } else {
-                                Toast.makeText(context, "Please grant Overlay Permission first", Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            context.stopService(intent)
-                        }
-                    }
+                    onCheckedChange = null
                 )
             }
         }
@@ -281,6 +307,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             description = "Split Nova Bar around centered punch-hole cameras.",
             checked = settings.cameraCutoutMode,
             onCheckedChange = { viewModel.setCameraCutoutMode(it) }
+        )
+
+        ToggleSetting(
+            title = "Follow Status Bar Visibility",
+            description = "Hide Nova Bar when the status bar is hidden (e.g. fullscreen apps).",
+            checked = settings.followStatusBarVisibility,
+            onCheckedChange = { viewModel.setFollowStatusBarVisibility(it) }
         )
         if (settings.cameraCutoutMode) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -707,13 +740,29 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Divider()
+    }
 
-        DiagnosticsDashboard(
-            context = context,
-            hasNotificationPermission = hasNotificationPermission.value,
-            hasAccessibilityPermission = hasAccessibilityPermission.value,
-            hasOverlayPermission = hasOverlayPermission.value
+    if (showDiagnosticsDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiagnosticsDialog = false },
+            title = { Text("Developer Diagnostics", fontWeight = FontWeight.Bold) },
+            text = {
+                Box(modifier = Modifier.fillMaxHeight(0.85f)) {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        DiagnosticsDashboard(
+                            context = context,
+                            hasNotificationPermission = hasNotificationPermission.value,
+                            hasAccessibilityPermission = hasAccessibilityPermission.value,
+                            hasOverlayPermission = hasOverlayPermission.value
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showDiagnosticsDialog = false }) {
+                    Text("Close")
+                }
+            }
         )
     }
 }

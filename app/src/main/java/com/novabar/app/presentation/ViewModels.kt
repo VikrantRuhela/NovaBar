@@ -199,6 +199,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     fun setOverlayEngine(engine: OverlayEngine) = viewModelScope.launch {
         repository.updateOverlayEngine(engine)
     }
+
+    fun setFollowStatusBarVisibility(follow: Boolean) = viewModelScope.launch {
+        repository.updateFollowStatusBarVisibility(follow)
+    }
 }
 
 class ViewModelFactory(private val context: Context) : ViewModelProvider.Factory {

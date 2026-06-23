@@ -58,7 +58,8 @@ data class NovaSettings(
     val cameraCutoutMode: Boolean = false,
     val cameraCutoutGapScale: Float = 1.0f,
     val leftSegmentWidthDp: Int = 120,
-    val rightSegmentWidthDp: Int = 120
+    val rightSegmentWidthDp: Int = 120,
+    val followStatusBarVisibility: Boolean = true
 )
 
 class SettingsRepository(private val context: Context) {
@@ -107,6 +108,7 @@ class SettingsRepository(private val context: Context) {
         private val CAMERA_CUTOUT_GAP_SCALE = floatPreferencesKey("camera_cutout_gap_scale")
         private val LEFT_SEGMENT_WIDTH_DP = intPreferencesKey("left_segment_width_dp")
         private val RIGHT_SEGMENT_WIDTH_DP = intPreferencesKey("right_segment_width_dp")
+        private val FOLLOW_STATUS_BAR_VISIBILITY = booleanPreferencesKey("follow_status_bar_visibility")
     }
 
     val settingsFlow: Flow<NovaSettings> = context.dataStore.data.map { preferences ->
@@ -154,7 +156,8 @@ class SettingsRepository(private val context: Context) {
             cameraCutoutMode = preferences[CAMERA_CUTOUT_MODE] ?: false,
             cameraCutoutGapScale = preferences[CAMERA_CUTOUT_GAP_SCALE] ?: 1.0f,
             leftSegmentWidthDp = preferences[LEFT_SEGMENT_WIDTH_DP] ?: 120,
-            rightSegmentWidthDp = preferences[RIGHT_SEGMENT_WIDTH_DP] ?: 120
+            rightSegmentWidthDp = preferences[RIGHT_SEGMENT_WIDTH_DP] ?: 120,
+            followStatusBarVisibility = preferences[FOLLOW_STATUS_BAR_VISIBILITY] ?: true
         )
     }
 
@@ -345,6 +348,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[RIGHT_SEGMENT_WIDTH_DP] = width }
     }
 
+    suspend fun updateFollowStatusBarVisibility(follow: Boolean) {
+        context.dataStore.edit { it[FOLLOW_STATUS_BAR_VISIBILITY] = follow }
+    }
+
     suspend fun importSettings(s: NovaSettings) {
         context.dataStore.edit { preferences ->
             preferences[IS_ENABLED] = s.isEnabled
@@ -392,6 +399,7 @@ class SettingsRepository(private val context: Context) {
             preferences[CAMERA_CUTOUT_GAP_SCALE] = s.cameraCutoutGapScale
             preferences[LEFT_SEGMENT_WIDTH_DP] = s.leftSegmentWidthDp
             preferences[RIGHT_SEGMENT_WIDTH_DP] = s.rightSegmentWidthDp
+            preferences[FOLLOW_STATUS_BAR_VISIBILITY] = s.followStatusBarVisibility
         }
     }
 }

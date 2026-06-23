@@ -43,6 +43,7 @@ class OverlayHost(private val context: Context) {
     private var currentSettings: NovaSettings? = null
     private var scope: CoroutineScope? = null
     private var windowJob: Job? = null
+    private var visibilityProvider: com.novabar.app.utils.SystemBarVisibilityProvider? = null
 
     private val lockscreenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -61,6 +62,8 @@ class OverlayHost(private val context: Context) {
     }
 
     fun show(windowType: Int, settings: NovaSettings) {
+        visibilityProvider?.stop()
+        visibilityProvider = null
         com.novabar.app.utils.CutoutManager.detectCutout(context)
         val density = context.resources.displayMetrics.density
         currentSettings = settings
@@ -191,10 +194,6 @@ class OverlayHost(private val context: Context) {
 
             val view = ComposeView(context).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-                setOnApplyWindowInsetsListener { _, insets ->
-                    com.novabar.app.utils.CutoutManager.detectCutout(context, insets)
-                    insets
-                }
                 setContent {
                     NovaBarUi()
                 }
@@ -251,6 +250,16 @@ class OverlayHost(private val context: Context) {
             composeView = view
         }
 
+        composeView?.let { view ->
+            val provider = com.novabar.app.utils.SystemBarVisibilityProvider(context, view).apply { start() }
+            visibilityProvider = provider
+            scope?.launch {
+                provider.isStatusBarVisible.collect { visible ->
+                    OverlayStateManager.systemBarVisible.value = visible
+                }
+            }
+        }
+
         if (!isOverlayAdded) {
             try {
                 windowManager.addView(composeView, layoutParams)
@@ -281,6 +290,8 @@ class OverlayHost(private val context: Context) {
     }
 
     fun remove() {
+        visibilityProvider?.stop()
+        visibilityProvider = null
         windowJob?.cancel()
         windowJob = null
         scope?.cancel()

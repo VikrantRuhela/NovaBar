@@ -394,7 +394,9 @@ fun NovaBarUi() {
         label = "BorderColor"
     )
 
-    val showOverlay = activeStateKey != "Idle" || settings.alwaysOnBar
+    val systemBarVisible by OverlayStateManager.systemBarVisible.collectAsState()
+    val isStatusBarSyncVisible = if (settings.followStatusBarVisibility) systemBarVisible else true
+    val showOverlay = (activeStateKey != "Idle" || settings.alwaysOnBar) && isStatusBarSyncVisible
 
     // Dimensions
     val borderThickness = settings.barBorderThickness.dp
@@ -541,10 +543,26 @@ fun NovaBarUi() {
         else -> Alignment.TopCenter
     }
 
+    val springSpecFloat = spring<Float>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+    val springSpecIntOffset = spring<IntOffset>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+    val translationOffsetPx = (8 * density).roundToInt()
+
     AnimatedVisibility(
         visible = showOverlay,
-        enter = fadeIn(),
-        exit = fadeOut()
+        enter = fadeIn(animationSpec = springSpecFloat) + slideInVertically(
+            initialOffsetY = { -translationOffsetPx },
+            animationSpec = springSpecIntOffset
+        ),
+        exit = fadeOut(animationSpec = springSpecFloat) + slideOutVertically(
+            targetOffsetY = { -translationOffsetPx },
+            animationSpec = springSpecIntOffset
+        )
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
