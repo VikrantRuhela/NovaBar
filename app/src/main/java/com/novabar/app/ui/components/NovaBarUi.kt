@@ -501,6 +501,18 @@ fun NovaBarUi() {
         label = "animatedCornerRadius"
     )
 
+    val batteryPercent by remember {
+        viewModel.activeState.map { state ->
+            (state as? OverlayState.Charging)?.data?.batteryPercentage ?: 0
+        }.distinctUntilChanged()
+    }.collectAsState(initial = 0)
+
+    val animatedPercent by animateFloatAsState(
+        targetValue = batteryPercent.toFloat(),
+        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+        label = "batteryPercent"
+    )
+
     // Wave Continuity: shared phase to prevent jumps during layout switches
     val chargingTransition = rememberInfiniteTransition(label = "chargingWaveGlobal")
     val chargingWavePhase by chargingTransition.animateFloat(
@@ -630,13 +642,7 @@ fun NovaBarUi() {
                                 color = foregroundColor,
                                 textSizeOffset = textSizeOffset,
                                 contentAlpha = contentAlpha.value,
-                                splitSegment = segment,
-                                wavePhase = chargingWavePhase,
-                                targetWidth = stateTargetWidth,
-                                targetHeight = stateTargetHeight,
-                                animatedWidth = animatedWidth,
-                                animatedHeight = animatedHeight,
-                                animatedCornerRadius = animatedCornerRadius
+                                splitSegment = segment
                             )
                             is OverlayState.Notification -> NotificationView(
                                 state.data, stateTargetState, viewModel, foregroundColor, textSizeOffset, splitSegment = segment
@@ -746,6 +752,69 @@ fun NovaBarUi() {
                     .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
                     .clip(RoundedCornerShape(animatedCornerRadius))
                     .background(backgroundColor)
+                    .drawBehind {
+                        if (activeStateKey == "Charging") {
+                            val fillFraction = (animatedPercent / 100f).coerceIn(0f, 1f)
+                            if (fillFraction > 0f) {
+                                val fillThemeColor = Color(0xFF34C759)
+                                val drawWidth = size.width
+                                val drawHeight = size.height
+                                val fillWidth = drawWidth * fillFraction
+
+                                val steps = 30
+
+                                // Layer 1: alpha = 0.18, amplitude = 3dp
+                                val amplitude1 = 3.dp.toPx()
+                                val frequency1 = (2f * Math.PI.toFloat()) / drawHeight
+                                val fillPath1 = Path()
+                                fillPath1.moveTo(0f, 0f)
+                                val xAtZero1 = fillWidth + kotlin.math.sin(0.0 - chargingWavePhase.toDouble()).toFloat() * amplitude1
+                                fillPath1.lineTo(xAtZero1.coerceIn(0f, drawWidth), 0f)
+                                for (i in 0..steps) {
+                                    val y = (i.toFloat() / steps) * drawHeight
+                                    val x = fillWidth + kotlin.math.sin(y * frequency1 - chargingWavePhase.toDouble()).toFloat() * amplitude1
+                                    fillPath1.lineTo(x.coerceIn(0f, drawWidth), y)
+                                }
+                                fillPath1.lineTo(0f, drawHeight)
+                                fillPath1.close()
+                                drawPath(path = fillPath1, color = fillThemeColor.copy(alpha = 0.18f))
+
+                                // Layer 2: alpha = 0.10, amplitude = 2dp
+                                val amplitude2 = 2.dp.toPx()
+                                val frequency2 = (2f * Math.PI.toFloat()) / (drawHeight * 0.8f)
+                                val phaseOffset2 = 2f
+                                val fillPath2 = Path()
+                                fillPath2.moveTo(0f, 0f)
+                                val xAtZero2 = fillWidth + kotlin.math.sin(0.0 - (chargingWavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
+                                fillPath2.lineTo(xAtZero2.coerceIn(0f, drawWidth), 0f)
+                                for (i in 0..steps) {
+                                    val y = (i.toFloat() / steps) * drawHeight
+                                    val x = fillWidth + kotlin.math.sin(y * frequency2 - (chargingWavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
+                                    fillPath2.lineTo(x.coerceIn(0f, drawWidth), y)
+                                }
+                                fillPath2.lineTo(0f, drawHeight)
+                                fillPath2.close()
+                                drawPath(path = fillPath2, color = fillThemeColor.copy(alpha = 0.10f))
+
+                                // Layer 3: alpha = 0.05, amplitude = 1dp
+                                val amplitude3 = 1.dp.toPx()
+                                val frequency3 = (2f * Math.PI.toFloat()) / (drawHeight * 1.2f)
+                                val phaseOffset3 = 4f
+                                val fillPath3 = Path()
+                                fillPath3.moveTo(0f, 0f)
+                                val xAtZero3 = fillWidth + kotlin.math.sin(0.0 - (chargingWavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
+                                fillPath3.lineTo(xAtZero3.coerceIn(0f, drawWidth), 0f)
+                                for (i in 0..steps) {
+                                    val y = (i.toFloat() / steps) * drawHeight
+                                    val x = fillWidth + kotlin.math.sin(y * frequency3 - (chargingWavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
+                                    fillPath3.lineTo(x.coerceIn(0f, drawWidth), y)
+                                }
+                                fillPath3.lineTo(0f, drawHeight)
+                                fillPath3.close()
+                                drawPath(path = fillPath3, color = fillThemeColor.copy(alpha = 0.05f))
+                            }
+                        }
+                    }
                     .then(gesturesModifier),
                 contentAlignment = Alignment.Center
             ) {
@@ -1076,107 +1145,14 @@ fun ChargingPill(
     color: Color,
     textSizeOffset: Float,
     contentAlpha: Float = 1f,
-    splitSegment: SplitSegment? = null,
-    wavePhase: Float = 0f,
-    targetWidth: Dp = 185.dp,
-    targetHeight: Dp = 44.dp,
-    animatedWidth: Dp = 185.dp,
-    animatedHeight: Dp = 44.dp,
-    animatedCornerRadius: Dp = 24.dp
+    splitSegment: SplitSegment? = null
 ) {
     val sizeOffset = textSizeOffset
-    val batteryPercent = state.batteryPercentage.coerceIn(0, 100)
-    
-    // Smooth transition when battery updates
-    val animatedPercent by animateFloatAsState(
-        targetValue = batteryPercent.toFloat(),
-        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-        label = "batteryPercent"
-    )
-
-    val fillFraction = when (splitSegment) {
-        SplitSegment.LEFT -> (animatedPercent / 100f * 2f).coerceIn(0f, 1f)
-        SplitSegment.RIGHT -> ((animatedPercent / 100f - 0.5f) * 2f).coerceIn(0f, 1f)
-        null -> animatedPercent / 100f
-    }
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        // Dedicated clipping container for the fill layer
-        if (fillFraction > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(animatedCornerRadius))
-                    .drawBehind {
-                        val stableHeight = targetHeight.toPx()
-                        val stableWidth = targetWidth.toPx()
-                        
-                        // For split layout, segment size.width is stable
-                        val drawWidth = if (splitSegment != null) size.width else stableWidth
-                        val drawHeight = if (splitSegment != null) size.height else stableHeight
-                        
-                        val fillWidth = drawWidth * fillFraction
-                        val fillThemeColor = Color(0xFF34C759)
-
-                        if (fillWidth > 0f) {
-                            val steps = 30
-
-                            // Layer 1: alpha = 0.18, amplitude = 3dp
-                            val amplitude1 = 3.dp.toPx()
-                            val frequency1 = (2f * Math.PI.toFloat()) / drawHeight
-                            val fillPath1 = Path()
-                            fillPath1.moveTo(0f, 0f)
-                            val xAtZero1 = fillWidth + kotlin.math.sin(0.0 - wavePhase.toDouble()).toFloat() * amplitude1
-                            fillPath1.lineTo(xAtZero1.coerceIn(0f, drawWidth), 0f)
-                            for (i in 0..steps) {
-                                val y = (i.toFloat() / steps) * drawHeight
-                                val x = fillWidth + kotlin.math.sin(y * frequency1 - wavePhase.toDouble()).toFloat() * amplitude1
-                                fillPath1.lineTo(x.coerceIn(0f, drawWidth), y)
-                            }
-                            fillPath1.lineTo(0f, drawHeight)
-                            fillPath1.close()
-                            drawPath(path = fillPath1, color = fillThemeColor.copy(alpha = 0.18f))
-
-                            // Layer 2: alpha = 0.10, amplitude = 2dp (with phase offset)
-                            val amplitude2 = 2.dp.toPx()
-                            val frequency2 = (2f * Math.PI.toFloat()) / (drawHeight * 0.8f)
-                            val phaseOffset2 = 2f
-                            val fillPath2 = Path()
-                            fillPath2.moveTo(0f, 0f)
-                            val xAtZero2 = fillWidth + kotlin.math.sin(0.0 - (wavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
-                            fillPath2.lineTo(xAtZero2.coerceIn(0f, drawWidth), 0f)
-                            for (i in 0..steps) {
-                                val y = (i.toFloat() / steps) * drawHeight
-                                val x = fillWidth + kotlin.math.sin(y * frequency2 - (wavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
-                                fillPath2.lineTo(x.coerceIn(0f, drawWidth), y)
-                            }
-                            fillPath2.lineTo(0f, drawHeight)
-                            fillPath2.close()
-                            drawPath(path = fillPath2, color = fillThemeColor.copy(alpha = 0.10f))
-
-                            // Layer 3: alpha = 0.05, amplitude = 1dp (with phase/depth offset)
-                            val amplitude3 = 1.dp.toPx()
-                            val frequency3 = (2f * Math.PI.toFloat()) / (drawHeight * 1.2f)
-                            val phaseOffset3 = 4f
-                            val fillPath3 = Path()
-                            fillPath3.moveTo(0f, 0f)
-                            val xAtZero3 = fillWidth + kotlin.math.sin(0.0 - (wavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
-                            fillPath3.lineTo(xAtZero3.coerceIn(0f, drawWidth), 0f)
-                            for (i in 0..steps) {
-                                val y = (i.toFloat() / steps) * drawHeight
-                                val x = fillWidth + kotlin.math.sin(y * frequency3 - (wavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
-                                fillPath3.lineTo(x.coerceIn(0f, drawWidth), y)
-                            }
-                            fillPath3.lineTo(0f, drawHeight)
-                            fillPath3.close()
-                            drawPath(path = fillPath3, color = fillThemeColor.copy(alpha = 0.05f))
-                        }
-                    }
-            )
-        }
 
         if (splitSegment != null) {
             if (splitSegment == SplitSegment.LEFT) {
