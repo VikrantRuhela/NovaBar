@@ -649,7 +649,7 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
-                if (isScreenRecordingNotification(sbn)) {
+                if (sbn.packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
                     Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_IGNORED: package=${sbn.packageName}")
                     return@launch
                 }
@@ -712,58 +712,42 @@ class NovaNotificationListener : NotificationListenerService() {
                 }
 
                 // 1. Check if Navigation Notification
-                val packageExists = try {
-                    packageManager.getPackageInfo(packageName, 0)
-                    true
-                } catch (e: Exception) {
-                    false
-                }
+                val isMapsPkg = packageName == "com.google.android.apps.maps"
+                val isNav = sbn.notification.category == Notification.CATEGORY_NAVIGATION ||
+                        packageName.contains("maps") || packageName.contains("waze")
 
-                val isNavPackage = packageName.contains("maps") || 
-                                   packageName.contains("waze") || 
-                                   packageName.contains("navigation") ||
-                                   packageName.contains("navigon") ||
-                                   packageName.contains("sygic") ||
-                                   packageName.contains("here.app.maps")
-
-                val isNavCategory = sbn.notification.category == Notification.CATEGORY_NAVIGATION
-                val isPotentialNav = isNavCategory || isNavPackage
-
-                if (isPotentialNav && packageExists && settings.navigationEnabled) {
+                if (isMapsPkg) {
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
                     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                    Log.d("NovaBarMapsDebug", "POSTED: pkg=$packageName, title='$title', text='$text', isNav=$isNav, navigationEnabled=${settings.navigationEnabled}")
+                }
 
-                    // Verify navigation session is active
-                    val isOngoing = (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0 ||
-                                    (notification.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0 ||
-                                    !sbn.isClearable
-
-                    val hasNavContent = title.isNotEmpty() && text.isNotEmpty() &&
-                                        !title.lowercase().contains("running in the background") &&
-                                        !title.lowercase().contains("is running") &&
-                                        !text.lowercase().contains("running in the background") &&
-                                        !text.lowercase().contains("is running")
-
-                    val isSessionActive = isOngoing && hasNavContent
-
-                    if (isSessionActive) {
-                        val eta = extras.getCharSequence("android.car.EXTENSIONS")?.toString() ?: "" // Fallback
-
-                        val largeIcon = notification.getLargeIcon() ?: notification.smallIcon
-                        val drawable = try {
-                            largeIcon?.loadDrawable(this@NovaNotificationListener)
-                        } catch (e: Exception) {
-                            null
-                        }
-
-                        OverlayStateManager.navigationState.value = NavigationState(
-                            maneuverInstruction = title,
-                            distanceRemaining = text,
-                            eta = eta,
-                            maneuverIcon = drawable
-                        )
-                        return@launch
+                if (isNav && settings.navigationEnabled) {
+                    val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+                    val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                    val eta = extras.getCharSequence("android.car.EXTENSIONS")?.toString() ?: "" // Fallback
+                    
+                    val largeIcon = notification.getLargeIcon() ?: notification.smallIcon
+                    val drawable = try {
+                        largeIcon?.loadDrawable(this@NovaNotificationListener)
+                    } catch (e: Exception) {
+                        null
                     }
+
+                    if (isMapsPkg) {
+                        Log.d("NovaBarMapsDebug", "SUCCESS: Classified as ActivityType.NAVIGATION")
+                    }
+
+                    OverlayStateManager.navigationState.value = NavigationState(
+                        maneuverInstruction = title,
+                        distanceRemaining = text,
+                        eta = eta,
+                        maneuverIcon = drawable
+                    )
+                    return@launch
+                } else if (isMapsPkg) {
+                    val reason = if (!settings.navigationEnabled) "Navigation disabled in settings" else "Not classified as navigation category/package"
+                    Log.d("NovaBarMapsDebug", "REJECTED: $reason")
                 }
 
                 // 2. Check if Clock app (Timer or Stopwatch)
@@ -930,7 +914,7 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
-                if (isScreenRecordingNotification(sbn)) {
+                if (sbn.packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
                     Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_REMOVED_IGNORED: package=${sbn.packageName}")
                     return@launch
                 }
