@@ -2927,6 +2927,41 @@ fun PlaybackSeekBar(
 }
 
 @Composable
+fun TorchIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        
+        // Flashlight head: trapezoid in top half
+        val headPath = Path().apply {
+            moveTo(w * 0.35f, h * 0.4f)
+            lineTo(w * 0.25f, h * 0.15f)
+            lineTo(w * 0.75f, h * 0.15f)
+            lineTo(w * 0.65f, h * 0.4f)
+            close()
+        }
+        drawPath(headPath, color)
+        
+        // Flashlight handle: rectangle in bottom half
+        val handlePath = Path().apply {
+            moveTo(w * 0.4f, h * 0.4f)
+            lineTo(w * 0.6f, h * 0.4f)
+            lineTo(w * 0.6f, h * 0.85f)
+            lineTo(w * 0.4f, h * 0.85f)
+            close()
+        }
+        drawPath(handlePath, color)
+        
+        // Light bulb details: small dot on handle
+        drawCircle(
+            color = if (color == Color.White) Color.Black else Color.White,
+            radius = w * 0.04f,
+            center = Offset(w * 0.5f, h * 0.55f)
+        )
+    }
+}
+
+@Composable
 fun TorchView(
     state: TorchState,
     currentState: NowBarState,
@@ -2939,6 +2974,10 @@ fun TorchView(
     val isStrengthSupported = state.isStrengthSupported
     val pct = state.brightnessPercentage
 
+    LaunchedEffect(state) {
+        Log.d("TorchView", "Received TorchState in UI: isActive=${state.isActive}, brightness=${pct}%, isStrengthSupported=$isStrengthSupported")
+    }
+
     if (splitSegment != null) {
         if (splitSegment == SplitSegment.LEFT) {
             Row(
@@ -2946,7 +2985,8 @@ fun TorchView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                Text("🔦", color = color, fontSize = (if (currentState == NowBarState.MINIMIZED) 12f else 14f + sizeOffset).sp)
+                val iconSize = if (currentState == NowBarState.MINIMIZED) 12.dp else 14.dp
+                TorchIcon(color = color, modifier = Modifier.size(iconSize))
             }
         } else {
             Row(
@@ -2977,7 +3017,7 @@ fun TorchView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
             ) {
-                Text("🔦", color = color, fontSize = (12f + sizeOffset).sp)
+                TorchIcon(color = color, modifier = Modifier.size(12.dp))
                 val label = if (isStrengthSupported) "Torch • $pct%" else "Torch"
                 Text(
                     text = label,
@@ -2997,7 +3037,7 @@ fun TorchView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("🔦", color = color, fontSize = (14f + sizeOffset).sp)
+                TorchIcon(color = color, modifier = Modifier.size(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Torch",
@@ -3030,7 +3070,7 @@ fun TorchView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("🔦", color = color, fontSize = (22f + sizeOffset).sp)
+                    TorchIcon(color = color, modifier = Modifier.size(24.dp))
                     Column {
                         Text(
                             text = "Torch",
