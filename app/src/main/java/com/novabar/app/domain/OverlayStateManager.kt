@@ -27,6 +27,7 @@ object OverlayStateManager {
     val stopwatchState = MutableStateFlow<StopwatchState?>(null)
     val navigationState = MutableStateFlow<NavigationState?>(null)
     val phoneCallState = MutableStateFlow<PhoneCallState?>(null)
+    val torchState = MutableStateFlow<TorchState?>(null)
     
     private val _chargingState = MutableStateFlow<ChargingState?>(null)
     private var chargingJob: Job? = null
@@ -95,7 +96,7 @@ object OverlayStateManager {
         _notificationState.value = null
     }
 
-    // List of active activities, ordered by priority: Call > Charging > Nav > Timer > Stopwatch > Music > Notification
+    // List of active activities, ordered by priority: Call > Navigation > Torch > Media > Charging > Timer > Notifications
     val activeActivities: StateFlow<List<OverlayState>> = combine(
         phoneCallState,
         _chargingState,
@@ -105,7 +106,8 @@ object OverlayStateManager {
         stopwatchState,
         mediaState,
         _notificationState,
-        isNotificationActive
+        isNotificationActive,
+        torchState
     ) { array ->
         val list = mutableListOf<OverlayState>()
         
@@ -118,25 +120,36 @@ object OverlayStateManager {
         val media = array[6] as MediaState?
         val notification = array[7] as NotificationState?
         val notificationActive = array[8] as Boolean
+        val torch = array[9] as TorchState?
 
+        // Call (Priority 1)
         if (call != null && call.isActive) {
             list.add(OverlayState.PhoneCall(call))
         }
-        if (chargingActive && charging != null) {
-            list.add(OverlayState.Charging(charging))
-        }
+        // Navigation (Priority 2)
         if (nav != null) {
             list.add(OverlayState.Navigation(nav))
         }
+        // Torch (Priority 3)
+        if (torch != null && torch.isActive) {
+            list.add(OverlayState.Torch(torch))
+        }
+        // Media (Priority 4)
+        if (media != null && media.title.isNotEmpty()) {
+            list.add(OverlayState.Media(media))
+        }
+        // Charging (Priority 5)
+        if (chargingActive && charging != null) {
+            list.add(OverlayState.Charging(charging))
+        }
+        // Timer/Stopwatch (Priority 6)
         if (timer != null && (timer.isRunning || timer.remainingMs > 0)) {
             list.add(OverlayState.Timer(timer))
         }
         if (stopwatch != null && (stopwatch.isRunning || stopwatch.elapsedMs > 0)) {
             list.add(OverlayState.Stopwatch(stopwatch))
         }
-        if (media != null && media.title.isNotEmpty()) {
-            list.add(OverlayState.Media(media))
-        }
+        // Notification (Priority 7)
         if (notificationActive && notification != null) {
             list.add(OverlayState.Notification(notification))
         }

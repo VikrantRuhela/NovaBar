@@ -356,8 +356,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
         SliderSetting(
             title = "Width Scale multiplier: ${String.format("%.2fx", settings.barWidthScale)}",
-            value = settings.barWidthScale,
-            valueRange = 0.1f..2.0f,
+            value = settings.barWidthScale.coerceIn(if (settings.cameraCutoutMode) 0.01f..1.5f else 0.5f..1.5f),
+            valueRange = if (settings.cameraCutoutMode) 0.01f..1.5f else 0.5f..1.5f,
             onValueChange = { viewModel.setBarWidthScale(it) }
         )
 

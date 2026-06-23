@@ -5,5 +5,6 @@ import android.app.Application
 class NovaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        com.novabar.app.utils.TorchManager.init(this)
     }
 }

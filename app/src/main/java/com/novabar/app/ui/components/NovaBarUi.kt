@@ -53,6 +53,7 @@ import com.novabar.app.domain.*
 import com.novabar.app.presentation.OverlayViewModel
 import com.novabar.app.presentation.ViewModelFactory
 import com.novabar.app.ui.theme.*
+import com.novabar.app.utils.TorchManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -224,6 +225,7 @@ fun NovaBarUi() {
                 is OverlayState.Navigation -> "Navigation"
                 is OverlayState.Media -> "Media"
                 is OverlayState.PhoneCall -> "PhoneCall"
+                is OverlayState.Torch -> "Torch"
             }
         }.distinctUntilChanged()
     }.collectAsState(initial = "Idle")
@@ -428,19 +430,19 @@ fun NovaBarUi() {
     )
 
     val animatedLeftSegmentWidth by animateDpAsState(
-        targetValue = settings.leftSegmentWidthDp.dp,
+        targetValue = if (isSplitLayout) (settings.leftSegmentWidthDp * settings.barWidthScale).dp else settings.leftSegmentWidthDp.dp,
         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
         label = "leftSegmentWidth"
     )
 
     val animatedRightSegmentWidth by animateDpAsState(
-        targetValue = settings.rightSegmentWidthDp.dp,
+        targetValue = if (isSplitLayout) (settings.rightSegmentWidthDp * settings.barWidthScale).dp else settings.rightSegmentWidthDp.dp,
         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
         label = "rightSegmentWidth"
     )
 
     val targetWidth = if (isSplitLayout) {
-        settings.leftSegmentWidthDp.dp + targetGap + settings.rightSegmentWidthDp.dp
+        (settings.leftSegmentWidthDp * settings.barWidthScale).dp + targetGap + (settings.rightSegmentWidthDp * settings.barWidthScale).dp
     } else {
         baseTargetWidth
     }
@@ -560,6 +562,7 @@ fun NovaBarUi() {
                         is OverlayState.Navigation -> "Navigation"
                         is OverlayState.Media -> "Media"
                         is OverlayState.PhoneCall -> "PhoneCall"
+                        is OverlayState.Torch -> "Torch"
                     }
                     put(key, initial)
                 }
@@ -575,6 +578,7 @@ fun NovaBarUi() {
                         is OverlayState.Navigation -> "Navigation"
                         is OverlayState.Media -> "Media"
                         is OverlayState.PhoneCall -> "PhoneCall"
+                        is OverlayState.Torch -> "Torch"
                     }
                     activeStateMap[key] = state
                 }
@@ -662,6 +666,18 @@ fun NovaBarUi() {
                                     }
                                 )
                             }
+                            is OverlayState.Torch -> {
+                                TorchView(
+                                    state = state.data,
+                                    currentState = stateTargetState,
+                                    color = foregroundColor,
+                                    textSizeOffset = textSizeOffset,
+                                    splitSegment = segment,
+                                    onInteraction = {
+                                        userInteractionTick = System.currentTimeMillis()
+                                    }
+                                )
+                            }
                             is OverlayState.Idle -> {
                                 if (settings.alwaysOnBar) {
                                     AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset, segment)
@@ -676,33 +692,62 @@ fun NovaBarUi() {
                 }
             }
 
-            val gesturesModifier = Modifier.pointerInput(activeList) {
+            val gesturesModifier = Modifier.pointerInput(activeList, activeStateKey) {
                 awaitPointerEventScope {
                     while (true) {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var dragX = 0f
                         var isSwipe = false
+                        var isLongPress = false
                         val pointerId = down.id
                         val touchSlop = viewConfiguration.touchSlop
                         
-                        do {
-                            val event = awaitPointerEvent()
-                            val dragChange = event.changes.firstOrNull { it.id == pointerId }
-                            if (dragChange != null) {
-                                if (dragChange.pressed) {
-                                    val diffX = dragChange.position.x - dragChange.previousPosition.x
-                                    dragX += diffX
-                                    if (kotlin.math.abs(dragX) > touchSlop) {
-                                        isSwipe = true
+                        val longPressResult = withTimeoutOrNull(500L) {
+                            var finished = false
+                            while (!finished) {
+                                val event = awaitPointerEvent()
+                                val dragChange = event.changes.firstOrNull { it.id == pointerId }
+                                if (dragChange != null) {
+                                    if (!dragChange.pressed) {
+                                        finished = true
+                                    } else {
+                                        val diffX = dragChange.position.x - dragChange.previousPosition.x
+                                        dragX += diffX
+                                        if (kotlin.math.abs(dragX) > touchSlop) {
+                                            isSwipe = true
+                                            dragChange.consume()
+                                            finished = true
+                                        }
                                     }
-                                    if (isSwipe) {
+                                } else {
+                                    finished = true
+                                }
+                            }
+                        }
+                        
+                        if (longPressResult == null && !isSwipe) {
+                            isLongPress = true
+                            if (activeStateKey == "Torch") {
+                                Log.d("NovaBar", "TORCH_LONG_PRESS_DETECTED")
+                                com.novabar.app.utils.TorchManager.setTorchEnabled(false)
+                            }
+                            do {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                        } else if (isSwipe) {
+                            do {
+                                val event = awaitPointerEvent()
+                                val dragChange = event.changes.firstOrNull { it.id == pointerId }
+                                if (dragChange != null) {
+                                    if (dragChange.pressed) {
+                                        val diffX = dragChange.position.x - dragChange.previousPosition.x
+                                        dragX += diffX
                                         dragChange.consume()
                                     }
                                 }
-                            }
-                        } while (event.changes.any { it.pressed })
-                        
-                        if (isSwipe) {
+                            } while (event.changes.any { it.pressed })
+                            
                             if (dragX > 60f) {
                                 OverlayStateManager.swipeRight()
                                 userInteractionTick = System.currentTimeMillis()
@@ -711,14 +756,40 @@ fun NovaBarUi() {
                                 userInteractionTick = System.currentTimeMillis()
                             }
                         } else {
-                            // Tap!
-                            if (activeStateKey != "Idle") {
-                                if (activeStateKey == "Media") {
-                                    DiagnosticsManager.expandClickTime = System.currentTimeMillis()
-                                    Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
+                            do {
+                                val event = awaitPointerEvent()
+                                val dragChange = event.changes.firstOrNull { it.id == pointerId }
+                                if (dragChange != null) {
+                                    if (dragChange.pressed) {
+                                        val diffX = dragChange.position.x - dragChange.previousPosition.x
+                                        dragX += diffX
+                                        if (kotlin.math.abs(dragX) > touchSlop) {
+                                            isSwipe = true
+                                        }
+                                        if (isSwipe) {
+                                            dragChange.consume()
+                                        }
+                                    }
                                 }
-                                OverlayStateManager.expand()
-                                userInteractionTick = System.currentTimeMillis()
+                            } while (event.changes.any { it.pressed })
+                            
+                            if (isSwipe) {
+                                if (dragX > 60f) {
+                                    OverlayStateManager.swipeRight()
+                                    userInteractionTick = System.currentTimeMillis()
+                                } else if (dragX < -60f) {
+                                    OverlayStateManager.swipeLeft()
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
+                            } else {
+                                if (activeStateKey != "Idle") {
+                                    if (activeStateKey == "Media") {
+                                        DiagnosticsManager.expandClickTime = System.currentTimeMillis()
+                                        Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
+                                    }
+                                    OverlayStateManager.expand()
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
                             }
                         }
                     }
@@ -2854,3 +2925,187 @@ fun PlaybackSeekBar(
         )
     }
 }
+
+@Composable
+fun TorchView(
+    state: TorchState,
+    currentState: NowBarState,
+    color: Color,
+    textSizeOffset: Float,
+    splitSegment: SplitSegment? = null,
+    onInteraction: () -> Unit
+) {
+    val sizeOffset = textSizeOffset
+    val isStrengthSupported = state.isStrengthSupported
+    val pct = state.brightnessPercentage
+
+    if (splitSegment != null) {
+        if (splitSegment == SplitSegment.LEFT) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("🔦", color = color, fontSize = (if (currentState == NowBarState.MINIMIZED) 12f else 14f + sizeOffset).sp)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val label = if (isStrengthSupported) "Torch • $pct%" else "Torch"
+                Text(
+                    text = label,
+                    color = color,
+                    fontSize = (if (currentState == NowBarState.MINIMIZED) 11f else 12f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        return
+    }
+
+    when (currentState) {
+        NowBarState.MINIMIZED -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+            ) {
+                Text("🔦", color = color, fontSize = (12f + sizeOffset).sp)
+                val label = if (isStrengthSupported) "Torch • $pct%" else "Torch"
+                Text(
+                    text = label,
+                    color = color,
+                    fontSize = (11f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        NowBarState.COMPACT -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("🔦", color = color, fontSize = (14f + sizeOffset).sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Torch",
+                        color = color,
+                        fontSize = (12f + sizeOffset).sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                    if (isStrengthSupported) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Brightness: $pct%",
+                            color = color.copy(alpha = 0.6f),
+                            fontSize = (10f + sizeOffset).sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+        NowBarState.EXPANDED -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("🔦", color = color, fontSize = (22f + sizeOffset).sp)
+                    Column {
+                        Text(
+                            text = "Torch",
+                            color = color,
+                            fontSize = (15f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (isStrengthSupported) "Adjustable Brightness" else "Active",
+                            color = color.copy(alpha = 0.5f),
+                            fontSize = (10f + sizeOffset).sp
+                        )
+                    }
+                }
+
+                if (isStrengthSupported) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "$pct%",
+                            color = color,
+                            fontSize = (20f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Slider(
+                            value = pct.toFloat() / 100f,
+                            onValueChange = {
+                                onInteraction()
+                                val newPct = (it * 100).toInt().coerceIn(1, 100)
+                                TorchManager.setTorchBrightnessPercentage(newPct)
+                            },
+                            valueRange = 0.01f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = color,
+                                activeTrackColor = color,
+                                inactiveTrackColor = color.copy(alpha = 0.2f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(18.dp)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Flashlight Active",
+                            color = color.copy(alpha = 0.8f),
+                            fontSize = (14f + sizeOffset).sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        onInteraction()
+                        TorchManager.setTorchEnabled(false)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFF44336)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp)
+                ) {
+                    Text("Turn Off", color = Color.White, fontSize = (12f + sizeOffset).sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+

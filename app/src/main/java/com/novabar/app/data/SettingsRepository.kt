@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "nova_settings")
 
@@ -213,7 +214,17 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateBarWidthScale(scale: Float) {
-        context.dataStore.edit { it[BAR_WIDTH_SCALE] = scale }
+        var cutoutMode = false
+        try {
+            val prefs = context.dataStore.data.first()
+            cutoutMode = prefs[CAMERA_CUTOUT_MODE] ?: false
+        } catch (e: Exception) {}
+        
+        val minLimit = if (cutoutMode) 0.01f else 0.5f
+        val maxLimit = 1.5f
+        val validatedScale = scale.coerceIn(minLimit, maxLimit)
+        
+        context.dataStore.edit { it[BAR_WIDTH_SCALE] = validatedScale }
     }
 
     suspend fun updateBarHeightPadding(padding: Int) {

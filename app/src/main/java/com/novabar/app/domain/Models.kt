@@ -79,6 +79,12 @@ data class PhoneCallState(
     val lastUpdateTime: Long = 0L
 )
 
+data class TorchState(
+    val isActive: Boolean = false,
+    val brightnessPercentage: Int = 100,
+    val isStrengthSupported: Boolean = false
+)
+
 sealed class OverlayState {
     object Idle : OverlayState()
     data class Charging(val data: ChargingState) : OverlayState()
@@ -88,4 +94,5 @@ sealed class OverlayState {
     data class Navigation(val data: NavigationState) : OverlayState()
     data class Media(val data: MediaState) : OverlayState()
     data class PhoneCall(val data: PhoneCallState) : OverlayState()
+    data class Torch(val data: TorchState) : OverlayState()
 }

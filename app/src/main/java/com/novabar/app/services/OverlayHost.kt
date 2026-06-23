@@ -114,7 +114,7 @@ class OverlayHost(private val context: Context) {
                 36f
             }
             val targetGap = baseGap * settings.cameraCutoutGapScale
-            (settings.leftSegmentWidthDp + targetGap + settings.rightSegmentWidthDp).toInt()
+            ((settings.leftSegmentWidthDp * settings.barWidthScale) + targetGap + (settings.rightSegmentWidthDp * settings.barWidthScale)).toInt()
         } else {
             when (initialMode) {
                 "Minimized" -> (115f * settings.barWidthScale).toInt()
@@ -329,7 +329,7 @@ class OverlayHost(private val context: Context) {
                         36f
                     }
                     val targetGap = baseGap * settings.cameraCutoutGapScale
-                    settings.leftSegmentWidthDp + targetGap + settings.rightSegmentWidthDp
+                    (settings.leftSegmentWidthDp * settings.barWidthScale) + targetGap + (settings.rightSegmentWidthDp * settings.barWidthScale)
                 } else {
                     115f * settings.barWidthScale
                 }
@@ -349,7 +349,7 @@ class OverlayHost(private val context: Context) {
                         36f
                     }
                     val targetGap = baseGap * settings.cameraCutoutGapScale
-                    settings.leftSegmentWidthDp + targetGap + settings.rightSegmentWidthDp
+                    (settings.leftSegmentWidthDp * settings.barWidthScale) + targetGap + (settings.rightSegmentWidthDp * settings.barWidthScale)
                 } else {
                     185f * settings.barWidthScale
                 }
