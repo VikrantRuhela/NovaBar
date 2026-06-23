@@ -111,7 +111,7 @@ object TorchManager {
                             Log.d(TAG, "Reflective field FLASH_INFO_STRENGTH_DEFAULT_LEVEL not found in class: ${e.message}")
                         }
 
-                        // Fallback: Scan characteristics keys list for matches by name if reflection fields were not found
+                        // Fallback 1: Scan characteristics keys list for matches by name if reflection fields were not found
                         if (maxKey == null || defaultKey == null) {
                             Log.d(TAG, "Scanning characteristics keys list for strength keys...")
                             for (key in chars.keys) {
@@ -128,6 +128,24 @@ object TorchManager {
                             }
                         }
 
+                        // Fallback 2: Construct Key objects dynamically if not found reflectively or in the list
+                        if (maxKey == null) {
+                            try {
+                                maxKey = CameraCharacteristics.Key("android.flash.info.strengthMaximumLevel", Int::class.java)
+                                Log.d(TAG, "Constructed maxKey dynamically")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to construct maxKey dynamically", e)
+                            }
+                        }
+                        if (defaultKey == null) {
+                            try {
+                                defaultKey = CameraCharacteristics.Key("android.flash.info.strengthDefaultLevel", Int::class.java)
+                                Log.d(TAG, "Constructed defaultKey dynamically")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to construct defaultKey dynamically", e)
+                            }
+                        }
+
                         if (maxKey != null) {
                             maxStrengthLevel = chars.get(maxKey) ?: 1
                         } else {
@@ -138,6 +156,23 @@ object TorchManager {
                             defaultStrengthLevel = chars.get(defaultKey) ?: 1
                         } else {
                             defaultStrengthLevel = 1
+                        }
+
+                        // Fallback 3: For Samsung devices running Android 12 or lower (API < 33)
+                        // where HAL does not expose the keys but the reflective strength control API method exists
+                        if (maxStrengthLevel <= 1) {
+                            val hasSamsungStrengthMethod = try {
+                                CameraManager::class.java.getMethod("turnOnTorchWithStrengthLevel", String::class.java, Int::class.javaPrimitiveType)
+                                true
+                            } catch (e: Exception) {
+                                false
+                            }
+                            val isSamsung = android.os.Build.MANUFACTURER.contains("samsung", ignoreCase = true)
+                            if (hasSamsungStrengthMethod && isSamsung) {
+                                Log.d(TAG, "Samsung backported method detected with API < 33. Hardcoding max strength level to 5.")
+                                maxStrengthLevel = 5
+                                defaultStrengthLevel = 3
+                            }
                         }
                         
                         isStrengthSupported = maxStrengthLevel > 1
