@@ -729,112 +729,59 @@ fun NovaBarUi() {
                 }
             }
 
-            if (isSplitLayout) {
-                val availableWidth = (animatedWidth - gapWidth).coerceAtLeast(0.dp)
-                val leftSegmentWidth = availableWidth * (leftWeight / totalWeight)
-                val rightSegmentWidth = availableWidth * (rightWeight / totalWeight)
-                
-                val leftShape = RoundedCornerShape(
-                    topStart = animatedCornerRadius,
-                    bottomStart = animatedCornerRadius,
-                    topEnd = 0.dp,
-                    bottomEnd = 0.dp
-                )
-                val rightShape = RoundedCornerShape(
-                    topStart = 0.dp,
-                    bottomStart = 0.dp,
-                    topEnd = animatedCornerRadius,
-                    bottomEnd = animatedCornerRadius
-                )
-
-                Row(
-                    modifier = Modifier
-                        .width(animatedWidth)
-                        .height(animatedHeight)
-                        .onGloballyPositioned { coordinates ->
-                            val rect = coordinates.boundsInWindow()
-                            OverlayStateManager.pillBounds.value = android.graphics.Rect(
-                                rect.left.roundToInt(),
-                                rect.top.roundToInt(),
-                                rect.right.roundToInt(),
-                                rect.bottom.roundToInt()
-                            )
-                        }
-                        .then(gesturesModifier),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Left Segment Box
-                    Box(
-                        modifier = Modifier
-                            .width(leftSegmentWidth)
-                            .fillMaxHeight()
-                            .onGloballyPositioned { coordinates ->
-                                val rect = coordinates.boundsInWindow()
-                                OverlayStateManager.leftPillBounds.value = android.graphics.Rect(
-                                    rect.left.roundToInt(),
-                                    rect.top.roundToInt(),
-                                    rect.right.roundToInt(),
-                                    rect.bottom.roundToInt()
-                                )
-                            }
-                            .shadow(elevation = 12.dp, shape = leftShape)
-                            .border(borderThickness, borderColor, leftShape)
-                            .clip(leftShape)
-                            .background(backgroundColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        RenderSegmentContent(SplitSegment.LEFT)
+            Box(
+                modifier = Modifier
+                    .width(animatedWidth)
+                    .height(animatedHeight)
+                    .onGloballyPositioned { coordinates ->
+                        val rect = coordinates.boundsInWindow()
+                        OverlayStateManager.pillBounds.value = android.graphics.Rect(
+                            rect.left.roundToInt(),
+                            rect.top.roundToInt(),
+                            rect.right.roundToInt(),
+                            rect.bottom.roundToInt()
+                        )
                     }
+                    .shadow(elevation = 12.dp, shape = RoundedCornerShape(animatedCornerRadius))
+                    .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
+                    .clip(RoundedCornerShape(animatedCornerRadius))
+                    .background(backgroundColor)
+                    .then(gesturesModifier),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSplitLayout) {
+                    val availableWidth = (animatedWidth - gapWidth).coerceAtLeast(0.dp)
+                    val leftSegmentWidth = availableWidth * (leftWeight / totalWeight)
+                    val rightSegmentWidth = availableWidth * (rightWeight / totalWeight)
 
-                    // Spacer for the gap
-                    Spacer(modifier = Modifier.width(gapWidth))
-
-                    // Right Segment Box
-                    Box(
-                        modifier = Modifier
-                            .width(rightSegmentWidth)
-                            .fillMaxHeight()
-                            .onGloballyPositioned { coordinates ->
-                                val rect = coordinates.boundsInWindow()
-                                OverlayStateManager.rightPillBounds.value = android.graphics.Rect(
-                                    rect.left.roundToInt(),
-                                    rect.top.roundToInt(),
-                                    rect.right.roundToInt(),
-                                    rect.bottom.roundToInt()
-                                )
-                            }
-                            .shadow(elevation = 12.dp, shape = rightShape)
-                            .border(borderThickness, borderColor, rightShape)
-                            .clip(rightShape)
-                            .background(backgroundColor),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RenderSegmentContent(SplitSegment.RIGHT)
-                    }
-                }
-            } else {
-                // Standard Unified Mode
-                Box(
-                    modifier = Modifier
-                        .width(animatedWidth)
-                        .height(animatedHeight)
-                        .onGloballyPositioned { coordinates ->
-                            val rect = coordinates.boundsInWindow()
-                            OverlayStateManager.pillBounds.value = android.graphics.Rect(
-                                rect.left.roundToInt(),
-                                rect.top.roundToInt(),
-                                rect.right.roundToInt(),
-                                rect.bottom.roundToInt()
-                            )
+                        // Left Content Box
+                        Box(
+                            modifier = Modifier
+                                .width(leftSegmentWidth)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            RenderSegmentContent(SplitSegment.LEFT)
                         }
-                        .shadow(elevation = 12.dp, shape = RoundedCornerShape(animatedCornerRadius))
-                        .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
-                        .clip(RoundedCornerShape(animatedCornerRadius))
-                        .background(backgroundColor)
-                        .then(gesturesModifier),
-                    contentAlignment = Alignment.Center
-                ) {
+
+                        // Reserved Camera Area Spacer
+                        Spacer(modifier = Modifier.width(gapWidth))
+
+                        // Right Content Box
+                        Box(
+                            modifier = Modifier
+                                .width(rightSegmentWidth)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            RenderSegmentContent(SplitSegment.RIGHT)
+                        }
+                    }
+                } else {
                     RenderSegmentContent(null)
                 }
             }

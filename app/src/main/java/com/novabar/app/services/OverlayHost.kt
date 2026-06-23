@@ -190,15 +190,7 @@ class OverlayHost(private val context: Context) {
                     NovaBarUi()
                 }
                 addOnComputeInternalInsetsListenerReflection(this) { region ->
-                    val isSplit = settings.cameraCutoutMode && 
-                            (OverlayStateManager.windowMode.value == "Compact" || OverlayStateManager.windowMode.value == "Minimized")
-                    if (isSplit) {
-                        region.setEmpty()
-                        region.op(OverlayStateManager.leftPillBounds.value, Region.Op.UNION)
-                        region.op(OverlayStateManager.rightPillBounds.value, Region.Op.UNION)
-                    } else {
-                        region.set(OverlayStateManager.pillBounds.value)
-                    }
+                    region.set(OverlayStateManager.pillBounds.value)
                 }
                 setOnTouchListener { view, event ->
                     DiagnosticsManager.incrementTouchEvents()
