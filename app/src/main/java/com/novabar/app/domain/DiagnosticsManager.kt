@@ -42,6 +42,12 @@ object DiagnosticsManager {
     val lastAccessibilityEvent = MutableStateFlow("None")
     val accessibilityForegroundPackage = MutableStateFlow("Unknown")
 
+    // CUTOUT SECTION
+    val hasDisplayCutout = MutableStateFlow(false)
+    val cutoutWidth = MutableStateFlow(0)
+    val cutoutCenterX = MutableStateFlow(0)
+    val cameraCutoutModeEnabled = MutableStateFlow(false)
+
     // OVERLAY SECTION
     val overlayVisible = MutableStateFlow(false)
     val overlayAttached = MutableStateFlow(false)

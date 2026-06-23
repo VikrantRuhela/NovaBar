@@ -15,6 +15,8 @@ object OverlayStateManager {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     val pillBounds = MutableStateFlow(Rect())
+    val leftPillBounds = MutableStateFlow(Rect())
+    val rightPillBounds = MutableStateFlow(Rect())
 
     fun updatePillBounds(rect: Rect) {
         pillBounds.value = rect

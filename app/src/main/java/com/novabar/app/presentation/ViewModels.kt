@@ -180,6 +180,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         repository.importSettings(settings)
     }
 
+    fun setCameraCutoutMode(enabled: Boolean) = viewModelScope.launch {
+        repository.updateCameraCutoutMode(enabled)
+    }
+
     fun setOverlayEngine(engine: OverlayEngine) = viewModelScope.launch {
         repository.updateOverlayEngine(engine)
     }

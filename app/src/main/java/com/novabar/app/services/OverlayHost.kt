@@ -61,6 +61,7 @@ class OverlayHost(private val context: Context) {
     }
 
     fun show(windowType: Int, settings: NovaSettings) {
+        com.novabar.app.utils.CutoutManager.detectCutout(context)
         val density = context.resources.displayMetrics.density
         currentSettings = settings
 
@@ -180,7 +181,15 @@ class OverlayHost(private val context: Context) {
                     NovaBarUi()
                 }
                 addOnComputeInternalInsetsListenerReflection(this) { region ->
-                    region.set(OverlayStateManager.pillBounds.value)
+                    val isSplit = settings.cameraCutoutMode && com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value && 
+                            (OverlayStateManager.windowMode.value == "Compact" || OverlayStateManager.windowMode.value == "Minimized")
+                    if (isSplit) {
+                        region.setEmpty()
+                        region.op(OverlayStateManager.leftPillBounds.value, Region.Op.UNION)
+                        region.op(OverlayStateManager.rightPillBounds.value, Region.Op.UNION)
+                    } else {
+                        region.set(OverlayStateManager.pillBounds.value)
+                    }
                 }
                 setOnTouchListener { view, event ->
                     DiagnosticsManager.incrementTouchEvents()

@@ -48,6 +48,7 @@ class SettingsActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.novabar.app.utils.CutoutManager.detectCutout(this)
         setContent {
             NovaBarTheme {
                 Scaffold(
@@ -103,6 +104,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     context,
                     android.Manifest.permission.ANSWER_PHONE_CALLS
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                
+                com.novabar.app.utils.CutoutManager.detectCutout(context)
 
                 // If overlay is enabled and permissions are granted, start/update service
                 if (settings.isEnabled && hasOverlayPermission.value) {
@@ -268,6 +271,16 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
         // --- 3. CUSTOMIZATION SLIDERS ---
         Text("Visual Customizations", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
+        val hasDisplayCutout by com.novabar.app.utils.CutoutManager.hasDisplayCutout.collectAsState()
+        if (hasDisplayCutout) {
+            ToggleSetting(
+                title = "Camera Cutout Layout",
+                description = "Split Nova Bar around centered punch-hole cameras.",
+                checked = settings.cameraCutoutMode,
+                onCheckedChange = { viewModel.setCameraCutoutMode(it) }
+            )
+        }
 
         SliderSetting(
             title = "Vertical Position Offset Y: ${settings.offsetY}dp",
@@ -638,7 +651,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val item = clipboard.primaryClip?.getItemAt(0)
                     val text = item?.text?.toString() ?: ""
-                    if (text.startsWith("NovaBarSettingsV1:") || text.startsWith("NovaBarSettingsV2:") || text.startsWith("NovaBarSettingsV3:") || text.startsWith("NovaBarSettingsV4:")) {
+                    if (text.startsWith("NovaBarSettingsV1:") || text.startsWith("NovaBarSettingsV2:") || text.startsWith("NovaBarSettingsV3:") || text.startsWith("NovaBarSettingsV4:") || text.startsWith("NovaBarSettingsV5:")) {
                         val imported = importSettings(text)
                         if (imported != null) {
                             viewModel.importSettings(imported)
@@ -794,12 +807,52 @@ private fun isAccessibilityServiceEnabled(context: Context): Boolean {
 // Custom String exporter/importer representation
 private fun exportSettings(s: NovaSettings): String {
     val pkgs = s.allowedNotificationPackages.joinToString("|")
-    return "NovaBarSettingsV4:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen}"
+    return "NovaBarSettingsV5:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},${s.blurRadius},${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode}"
 }
 
 private fun importSettings(str: String): NovaSettings? {
     return try {
-        if (str.startsWith("NovaBarSettingsV4:")) {
+        if (str.startsWith("NovaBarSettingsV5:")) {
+            val parts = str.substringAfter("NovaBarSettingsV5:").split(",")
+            val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
+            NovaSettings(
+                isEnabled = parts[0].toBoolean(),
+                positionY = parts[1].toInt(),
+                cornerRadius = parts[2].toInt(),
+                opacity = parts[3].toFloat(),
+                blurRadius = parts[4].toInt(),
+                animationSpeedMultiplier = parts[5].toFloat(),
+                mediaControlsEnabled = parts[6].toBoolean(),
+                timerEnabled = parts[7].toBoolean(),
+                stopwatchEnabled = parts[8].toBoolean(),
+                navigationEnabled = parts[9].toBoolean(),
+                chargingEnabled = parts[10].toBoolean(),
+                notificationsEnabled = parts[11].toBoolean(),
+                colorAdaptationEnabled = parts[12].toBoolean(),
+                allowedNotificationPackages = pkgs,
+                barWidthScale = parts[14].toFloat(),
+                barHeightPadding = parts[15].toInt(),
+                barBorderThickness = parts[16].toInt(),
+                barGravity = parts[17],
+                offsetX = parts[18].toInt(),
+                offsetY = parts[19].toInt(),
+                showWhenIdle = parts[20].toBoolean(),
+                defaultPresentationMode = parts[21],
+                visualizerStyle = parts[22],
+                visualizerSensitivity = parts[23].toFloat(),
+                albumArtCornerRadius = parts[24].toInt(),
+                progressVisibility = parts[25].toBoolean(),
+                autoCollapseTimeout = parts[26].toInt(),
+                textSize = parts[27],
+                overlayPosition = parts[28],
+                alwaysOnBar = parts[29].toBoolean(),
+                alwaysOnConfig = parts[30],
+                timeFormat = parts[31],
+                showSeconds = parts[32].toBoolean(),
+                showOnLockscreen = parts[33].toBoolean(),
+                cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false
+            )
+        } else if (str.startsWith("NovaBarSettingsV4:")) {
             val parts = str.substringAfter("NovaBarSettingsV4:").split(",")
             val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
             NovaSettings(
@@ -836,7 +889,8 @@ private fun importSettings(str: String): NovaSettings? {
                 alwaysOnConfig = parts[30],
                 timeFormat = parts[31],
                 showSeconds = parts[32].toBoolean(),
-                showOnLockscreen = if (parts.size > 33) parts[33].toBoolean() else true
+                showOnLockscreen = if (parts.size > 33) parts[33].toBoolean() else true,
+                cameraCutoutMode = false
             )
         } else if (str.startsWith("NovaBarSettingsV3:")) {
             val parts = str.substringAfter("NovaBarSettingsV3:").split(",")
@@ -994,6 +1048,11 @@ fun DiagnosticsDashboard(
                 val currentOverlayBounds by DiagnosticsManager.currentOverlayBounds.collectAsState()
                 val currentPriorityActivity by DiagnosticsManager.currentPriorityActivity.collectAsState()
 
+                val cutoutHasCutout by DiagnosticsManager.hasDisplayCutout.collectAsState()
+                val cutoutWidthDiag by DiagnosticsManager.cutoutWidth.collectAsState()
+                val cutoutCenterXDiag by DiagnosticsManager.cutoutCenterX.collectAsState()
+                val cutoutModeEnabled by DiagnosticsManager.cameraCutoutModeEnabled.collectAsState()
+
                 // Display Sections
                 DiagnosticsSection(title = "General Settings") {
                     DiagnosticsRow("Overlay Engine", overlayEngine)
@@ -1005,6 +1064,13 @@ fun DiagnosticsDashboard(
                     DiagnosticsRow("Blur Backend", blurBackend)
                     DiagnosticsRow("Dimensions", "${windowWidth}x${windowHeight} px")
                     DiagnosticsRow("Touch Count", touchEventsReceived.toString())
+                }
+
+                DiagnosticsSection(title = "Display Cutout Status") {
+                    DiagnosticsRow("Has Cutout", cutoutHasCutout.toString())
+                    DiagnosticsRow("Cutout Width", "$cutoutWidthDiag px")
+                    DiagnosticsRow("Cutout Center X", "$cutoutCenterXDiag px")
+                    DiagnosticsRow("Cutout Mode Enabled", cutoutModeEnabled.toString())
                 }
 
                 DiagnosticsSection(title = "Media Playback Status") {

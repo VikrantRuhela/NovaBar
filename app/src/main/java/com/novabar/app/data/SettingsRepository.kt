@@ -53,7 +53,8 @@ data class NovaSettings(
     val timeFormat: String = "System Default",
     val showSeconds: Boolean = false,
     val showOnLockscreen: Boolean = true,
-    val overlayEngine: OverlayEngine = OverlayEngine.APPLICATION
+    val overlayEngine: OverlayEngine = OverlayEngine.APPLICATION,
+    val cameraCutoutMode: Boolean = false
 )
 
 class SettingsRepository(private val context: Context) {
@@ -98,6 +99,7 @@ class SettingsRepository(private val context: Context) {
         private val SHOW_SECONDS = booleanPreferencesKey("show_seconds")
         private val SHOW_ON_LOCKSCREEN = booleanPreferencesKey("show_on_lockscreen")
         private val OVERLAY_ENGINE = stringPreferencesKey("overlay_engine")
+        private val CAMERA_CUTOUT_MODE = booleanPreferencesKey("camera_cutout_mode")
     }
 
     val settingsFlow: Flow<NovaSettings> = context.dataStore.data.map { preferences ->
@@ -141,7 +143,8 @@ class SettingsRepository(private val context: Context) {
             overlayEngine = when (preferences[OVERLAY_ENGINE] ?: "application") {
                 "accessibility" -> OverlayEngine.ACCESSIBILITY
                 else -> OverlayEngine.APPLICATION
-            }
+            },
+            cameraCutoutMode = preferences[CAMERA_CUTOUT_MODE] ?: false
         )
     }
 
@@ -306,6 +309,10 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateCameraCutoutMode(enabled: Boolean) {
+        context.dataStore.edit { it[CAMERA_CUTOUT_MODE] = enabled }
+    }
+
     suspend fun importSettings(s: NovaSettings) {
         context.dataStore.edit { preferences ->
             preferences[IS_ENABLED] = s.isEnabled
@@ -349,6 +356,7 @@ class SettingsRepository(private val context: Context) {
                 OverlayEngine.ACCESSIBILITY -> "accessibility"
                 OverlayEngine.APPLICATION -> "application"
             }
+            preferences[CAMERA_CUTOUT_MODE] = s.cameraCutoutMode
         }
     }
 }
