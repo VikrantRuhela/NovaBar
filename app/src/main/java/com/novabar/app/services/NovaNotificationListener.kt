@@ -649,6 +649,10 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
+                if (isScreenRecordingNotification(sbn)) {
+                    Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_IGNORED: package=${sbn.packageName}")
+                    return@launch
+                }
                 val packageName = sbn.packageName
                 val notification = sbn.notification
                 val extras = notification.extras
@@ -708,28 +712,58 @@ class NovaNotificationListener : NotificationListenerService() {
                 }
 
                 // 1. Check if Navigation Notification
-                val isNav = sbn.notification.category == Notification.CATEGORY_NAVIGATION ||
-                        packageName.contains("maps") || packageName.contains("waze")
-                
-                if (isNav && settings.navigationEnabled) {
+                val packageExists = try {
+                    packageManager.getPackageInfo(packageName, 0)
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+
+                val isNavPackage = packageName.contains("maps") || 
+                                   packageName.contains("waze") || 
+                                   packageName.contains("navigation") ||
+                                   packageName.contains("navigon") ||
+                                   packageName.contains("sygic") ||
+                                   packageName.contains("here.app.maps")
+
+                val isNavCategory = sbn.notification.category == Notification.CATEGORY_NAVIGATION
+                val isPotentialNav = isNavCategory || isNavPackage
+
+                if (isPotentialNav && packageExists && settings.navigationEnabled) {
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
                     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-                    val eta = extras.getCharSequence("android.car.EXTENSIONS")?.toString() ?: "" // Fallback
-                    
-                    val largeIcon = notification.getLargeIcon() ?: notification.smallIcon
-                    val drawable = try {
-                        largeIcon?.loadDrawable(this@NovaNotificationListener)
-                    } catch (e: Exception) {
-                        null
-                    }
 
-                    OverlayStateManager.navigationState.value = NavigationState(
-                        maneuverInstruction = title,
-                        distanceRemaining = text,
-                        eta = eta,
-                        maneuverIcon = drawable
-                    )
-                    return@launch
+                    // Verify navigation session is active
+                    val isOngoing = (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0 ||
+                                    (notification.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0 ||
+                                    !sbn.isClearable
+
+                    val hasNavContent = title.isNotEmpty() && text.isNotEmpty() &&
+                                        !title.lowercase().contains("running in the background") &&
+                                        !title.lowercase().contains("is running") &&
+                                        !text.lowercase().contains("running in the background") &&
+                                        !text.lowercase().contains("is running")
+
+                    val isSessionActive = isOngoing && hasNavContent
+
+                    if (isSessionActive) {
+                        val eta = extras.getCharSequence("android.car.EXTENSIONS")?.toString() ?: "" // Fallback
+
+                        val largeIcon = notification.getLargeIcon() ?: notification.smallIcon
+                        val drawable = try {
+                            largeIcon?.loadDrawable(this@NovaNotificationListener)
+                        } catch (e: Exception) {
+                            null
+                        }
+
+                        OverlayStateManager.navigationState.value = NavigationState(
+                            maneuverInstruction = title,
+                            distanceRemaining = text,
+                            eta = eta,
+                            maneuverIcon = drawable
+                        )
+                        return@launch
+                    }
                 }
 
                 // 2. Check if Clock app (Timer or Stopwatch)
@@ -896,6 +930,10 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
+                if (isScreenRecordingNotification(sbn)) {
+                    Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_REMOVED_IGNORED: package=${sbn.packageName}")
+                    return@launch
+                }
                 val packageName = sbn.packageName
                 val currentNotification = OverlayStateManager.activeState.value
                 
@@ -936,5 +974,29 @@ class NovaNotificationListener : NotificationListenerService() {
                 Log.e(tag, "Error handling removed notification", e)
             }
         }
+    }
+
+    private fun isScreenRecordingNotification(sbn: StatusBarNotification): Boolean {
+        val packageName = sbn.packageName.lowercase()
+        val notification = sbn.notification
+        val extras = notification.extras ?: Bundle()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
+        
+        val matchesPkg = packageName == "com.samsung.android.app.smartcapture" ||
+                         packageName == "com.miui.screenrecorder" ||
+                         packageName == "com.xiaomi.screenrecorder" ||
+                         packageName == "com.android.systemui"
+                         
+        val matchesKeywords = title.contains("screen recording") ||
+                             title.contains("recording screen") ||
+                             title.contains("recording in progress") ||
+                             title.contains("stop recording") ||
+                             text.contains("screen recording") ||
+                             text.contains("recording screen") ||
+                             text.contains("recording in progress") ||
+                             text.contains("stop recording")
+                             
+        return matchesPkg && matchesKeywords
     }
 }

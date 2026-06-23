@@ -433,10 +433,8 @@ fun NovaBarUi() {
         minimumSegmentWidth * (totalWeight / rightWeight)
     )
 
-    // Calculate maximum allowed gap on screen
-    val screenWidthPx = LocalContext.current.resources.displayMetrics.widthPixels
-    val screenWidthDp = (screenWidthPx / density).dp
-    val maximumAllowedGap = (screenWidthDp - minAvailableWidth).coerceAtLeast(0.dp)
+    // Calculate maximum allowed gap inside the pill to prevent segment collapse
+    val maximumAllowedGap = (baseTargetWidth - minAvailableWidth).coerceAtLeast(0.dp)
 
     // Clamp the target gap width before animating
     val targetGap = (baseGap * settings.cameraCutoutGapScale).coerceAtMost(maximumAllowedGap)
@@ -448,12 +446,7 @@ fun NovaBarUi() {
         label = "cameraGap"
     )
 
-    val targetWidth = if (isSplitLayout) {
-        val availableWidth = baseTargetWidth.coerceAtLeast(minAvailableWidth)
-        availableWidth + targetGap
-    } else {
-        baseTargetWidth
-    }
+    val targetWidth = baseTargetWidth
 
     val targetHeight = when (targetState) {
         NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
