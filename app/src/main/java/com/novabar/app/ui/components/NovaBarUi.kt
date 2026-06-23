@@ -396,10 +396,63 @@ fun NovaBarUi() {
 
     // Dimensions
     val borderThickness = settings.barBorderThickness.dp
-    val targetWidth = when (targetState) {
+
+    val baseTargetWidth = when (targetState) {
         NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
         NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
         NowBarState.EXPANDED -> 290.dp
+    }
+
+    val cameraCutoutModeEnabled = settings.cameraCutoutMode
+    val hasCenteredPunchHole by com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.collectAsState()
+    
+    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT)
+    
+    val density = LocalContext.current.resources.displayMetrics.density
+    val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.collectAsState().value
+    val cutoutWidthDp = (cutoutWidthPx / density).dp
+    val safetyPadding = 12.dp
+    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
+        cutoutWidthDp + safetyPadding
+    } else {
+        36.dp
+    }
+
+    val minimumSegmentWidth = 56.dp
+    val rightWeight = when (activeStateKey) {
+        "Media" -> 1.5f
+        "Notification", "Navigation" -> 2.0f
+        else -> 1.0f
+    }
+    val leftWeight = 1.0f
+    val totalWeight = leftWeight + rightWeight
+
+    // Calculate minimum required available width to ensure both weighted segments are >= 56.dp
+    val minAvailableWidth = maxOf(
+        minimumSegmentWidth * (totalWeight / leftWeight),
+        minimumSegmentWidth * (totalWeight / rightWeight)
+    )
+
+    // Calculate maximum allowed gap on screen
+    val screenWidthPx = LocalContext.current.resources.displayMetrics.widthPixels
+    val screenWidthDp = (screenWidthPx / density).dp
+    val maximumAllowedGap = (screenWidthDp - minAvailableWidth).coerceAtLeast(0.dp)
+
+    // Clamp the target gap width before animating
+    val targetGap = (baseGap * settings.cameraCutoutGapScale).coerceAtMost(maximumAllowedGap)
+
+    // Gap Animation:
+    val gapWidth by animateDpAsState(
+        targetValue = targetGap,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "cameraGap"
+    )
+
+    val targetWidth = if (isSplitLayout) {
+        val availableWidth = baseTargetWidth.coerceAtLeast(minAvailableWidth)
+        availableWidth + targetGap
+    } else {
+        baseTargetWidth
     }
 
     val targetHeight = when (targetState) {
@@ -464,49 +517,6 @@ fun NovaBarUi() {
     LaunchedEffect(settings.cameraCutoutMode) {
         DiagnosticsManager.cameraCutoutModeEnabled.value = settings.cameraCutoutMode
     }
-
-    val cameraCutoutModeEnabled = settings.cameraCutoutMode
-    val hasCenteredPunchHole by com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.collectAsState()
-    
-    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT)
-    
-    val density = LocalContext.current.resources.displayMetrics.density
-    val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.collectAsState().value
-    val cutoutWidthDp = (cutoutWidthPx / density).dp
-    val safetyPadding = 12.dp
-    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
-        cutoutWidthDp + safetyPadding
-    } else {
-        36.dp
-    }
-    // Safe Segment Width Protection logic:
-    val minimumSegmentWidth = 56.dp
-    val rightWeight = when (activeStateKey) {
-        "Media" -> 1.5f
-        "Notification", "Navigation" -> 2.0f
-        else -> 1.0f
-    }
-    val leftWeight = 1.0f
-    val totalWeight = leftWeight + rightWeight
-
-    // Calculate minimum required available width to ensure both weighted segments are >= 56.dp
-    val minAvailableWidth = maxOf(
-        minimumSegmentWidth * (totalWeight / leftWeight),
-        minimumSegmentWidth * (totalWeight / rightWeight)
-    )
-
-    // The maximum gap width is whatever is left from animatedWidth
-    val maximumAllowedGap = (animatedWidth - minAvailableWidth).coerceAtLeast(0.dp)
-
-    // Clamp the target gap width before animating
-    val targetGapWidth = (baseGap * settings.cameraCutoutGapScale).coerceAtMost(maximumAllowedGap)
-
-    // Gap Animation:
-    val gapWidth by animateDpAsState(
-        targetValue = targetGapWidth,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "gapWidthAnimation"
-    )
 
     LaunchedEffect(settings.cameraCutoutGapScale, gapWidth) {
         DiagnosticsManager.cutoutGapScale.value = settings.cameraCutoutGapScale
@@ -723,6 +733,20 @@ fun NovaBarUi() {
                 val availableWidth = (animatedWidth - gapWidth).coerceAtLeast(0.dp)
                 val leftSegmentWidth = availableWidth * (leftWeight / totalWeight)
                 val rightSegmentWidth = availableWidth * (rightWeight / totalWeight)
+                
+                val leftShape = RoundedCornerShape(
+                    topStart = animatedCornerRadius,
+                    bottomStart = animatedCornerRadius,
+                    topEnd = 0.dp,
+                    bottomEnd = 0.dp
+                )
+                val rightShape = RoundedCornerShape(
+                    topStart = 0.dp,
+                    bottomStart = 0.dp,
+                    topEnd = animatedCornerRadius,
+                    bottomEnd = animatedCornerRadius
+                )
+
                 Row(
                     modifier = Modifier
                         .width(animatedWidth)
@@ -754,9 +778,9 @@ fun NovaBarUi() {
                                     rect.bottom.roundToInt()
                                 )
                             }
-                            .shadow(elevation = 12.dp, shape = RoundedCornerShape(animatedCornerRadius))
-                            .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
-                            .clip(RoundedCornerShape(animatedCornerRadius))
+                            .shadow(elevation = 12.dp, shape = leftShape)
+                            .border(borderThickness, borderColor, leftShape)
+                            .clip(leftShape)
                             .background(backgroundColor),
                         contentAlignment = Alignment.Center
                     ) {
@@ -780,9 +804,9 @@ fun NovaBarUi() {
                                     rect.bottom.roundToInt()
                                 )
                             }
-                            .shadow(elevation = 12.dp, shape = RoundedCornerShape(animatedCornerRadius))
-                            .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
-                            .clip(RoundedCornerShape(animatedCornerRadius))
+                            .shadow(elevation = 12.dp, shape = rightShape)
+                            .border(borderThickness, borderColor, rightShape)
+                            .clip(rightShape)
                             .background(backgroundColor),
                         contentAlignment = Alignment.Center
                     ) {

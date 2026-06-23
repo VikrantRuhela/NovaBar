@@ -103,17 +103,22 @@ class OverlayHost(private val context: Context) {
         }
 
         val initialMode = OverlayStateManager.windowMode.value
-        val initialWidthDp = when (initialMode) {
-            "Minimized" -> (115f * settings.barWidthScale).toInt()
-            "Compact" -> (185f * settings.barWidthScale).toInt()
-            else -> 290
+        val isSplit = settings.cameraCutoutMode && (initialMode == "Compact" || initialMode == "Minimized")
+        val initialWidthPx = if (isSplit) {
+            screenWidthPx
+        } else {
+            val initialWidthDp = when (initialMode) {
+                "Minimized" -> (115f * settings.barWidthScale).toInt()
+                "Compact" -> (185f * settings.barWidthScale).toInt()
+                else -> 290
+            }
+            (initialWidthDp * density).toInt()
         }
         val initialHeightDp = when (initialMode) {
             "Minimized" -> (38 + settings.barHeightPadding).coerceAtLeast(24)
             "Compact" -> (44 + settings.barHeightPadding).coerceAtLeast(30)
             else -> 205
         }
-        val initialWidthPx = (initialWidthDp * density).toInt()
         val initialHeightPx = (initialHeightDp * density).toInt()
 
         val layoutParams = WindowManager.LayoutParams(
@@ -310,23 +315,32 @@ class OverlayHost(private val context: Context) {
 
         val targetWidth: Int
         val targetHeight: Int
-
-        when (mode) {
-            "Minimized" -> {
-                val w = (115f * settings.barWidthScale).toInt()
-                val h = (38 + settings.barHeightPadding).coerceAtLeast(24)
-                targetWidth = (w * density).toInt()
-                targetHeight = (h * density).toInt()
+        val isSplit = settings.cameraCutoutMode && (mode == "Compact" || mode == "Minimized")
+        if (isSplit) {
+            targetWidth = context.resources.displayMetrics.widthPixels
+            val h = when (mode) {
+                "Minimized" -> (38 + settings.barHeightPadding).coerceAtLeast(24)
+                else -> (44 + settings.barHeightPadding).coerceAtLeast(30)
             }
-            "Compact" -> {
-                val w = (185f * settings.barWidthScale).toInt()
-                val h = (44 + settings.barHeightPadding).coerceAtLeast(30)
-                targetWidth = (w * density).toInt()
-                targetHeight = (h * density).toInt()
-            }
-            else -> { // "Expanded"
-                targetWidth = (290 * density).toInt()
-                targetHeight = (205 * density).toInt()
+            targetHeight = (h * density).toInt()
+        } else {
+            when (mode) {
+                "Minimized" -> {
+                    val w = (115f * settings.barWidthScale).toInt()
+                    val h = (38 + settings.barHeightPadding).coerceAtLeast(24)
+                    targetWidth = (w * density).toInt()
+                    targetHeight = (h * density).toInt()
+                }
+                "Compact" -> {
+                    val w = (185f * settings.barWidthScale).toInt()
+                    val h = (44 + settings.barHeightPadding).coerceAtLeast(30)
+                    targetWidth = (w * density).toInt()
+                    targetHeight = (h * density).toInt()
+                }
+                else -> { // "Expanded"
+                    targetWidth = (290 * density).toInt()
+                    targetHeight = (205 * density).toInt()
+                }
             }
         }
 
