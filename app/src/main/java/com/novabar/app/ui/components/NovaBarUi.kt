@@ -62,6 +62,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 
 fun drawableToBitmap(drawable: android.graphics.drawable.Drawable?): Bitmap? {
     if (drawable == null) return null
@@ -2600,7 +2602,8 @@ fun MediaView(
                     onSeekTo = onSeekTo,
                     onInteraction = onInteraction,
                     controlsAlpha = controlsAlpha,
-                    controlsOffsetY = controlsOffsetY
+                    controlsOffsetY = controlsOffsetY,
+                    songId = state.title + "_" + state.artist
                 )
 
                 MediaControlsSection(
@@ -2855,6 +2858,125 @@ fun MediaControlsSection(
 }
 
 @Composable
+fun WavyProgressSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    color: Color,
+    songId: String,
+    modifier: Modifier = Modifier
+) {
+    var width by remember { mutableStateOf(1f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    
+    val amplitude = remember(density) { with(density) { 3.dp.toPx() } }
+    val wavelength = remember(density) { with(density) { 22.dp.toPx() } }
+    val strokeWidth = remember(density) { with(density) { 3.dp.toPx() } }
+    val thumbRadius = remember(density) { with(density) { 5.dp.toPx() } }
+
+    val fullPath = remember(width, songId) {
+        Path().apply {
+            if (width > 1f) {
+                moveTo(0f, 0f)
+                var x = 0f
+                while (x <= width) {
+                    val y = amplitude * kotlin.math.sin(2.0 * Math.PI * x / wavelength).toFloat()
+                    lineTo(x, y)
+                    x += 2f
+                }
+            }
+        }
+    }
+
+    val progressX = width * value
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .onGloballyPositioned { coordinates ->
+                width = coordinates.size.width.toFloat()
+            }
+            .pointerInput(width) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startX = down.position.x
+                        val initialValue = (startX / width).coerceIn(0f, 1f)
+                        onValueChange(initialValue)
+                        
+                        var isDragging = false
+                        val pointerId = down.id
+                        
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId }
+                            if (change == null || !change.pressed) {
+                                onValueChangeFinished()
+                                break
+                            }
+                            
+                            val currentX = change.position.x
+                            if (!isDragging && kotlin.math.abs(currentX - startX) > viewConfiguration.touchSlop) {
+                                isDragging = true
+                            }
+                            
+                            if (isDragging) {
+                                val newValue = (currentX / width).coerceIn(0f, 1f)
+                                onValueChange(newValue)
+                                change.consume()
+                            }
+                        }
+                    }
+                }
+            }
+    ) {
+        Canvas(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val cy = size.height / 2f
+            
+            // Draw remaining portion (flat horizontal line)
+            drawLine(
+                color = color.copy(alpha = 0.24f),
+                start = Offset(progressX, cy),
+                end = Offset(size.width, cy),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round
+            )
+            
+            // Draw played portion (sine wave)
+            clipRect(
+                left = -strokeWidth - 10f,
+                top = 0f,
+                right = progressX,
+                bottom = size.height
+            ) {
+                translate(top = cy) {
+                    drawPath(
+                        path = fullPath,
+                        color = color,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = strokeWidth,
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                }
+            }
+            
+            // Draw progress thumb
+            val yProgress = cy + amplitude * kotlin.math.sin(2.0 * Math.PI * progressX / wavelength).toFloat()
+            drawCircle(
+                color = color,
+                radius = thumbRadius,
+                center = Offset(progressX, yProgress)
+            )
+        }
+    }
+}
+
+@Composable
 fun PlaybackSeekBar(
     playbackPositionStateFlow: kotlinx.coroutines.flow.StateFlow<Long>,
     duration: Long,
@@ -2862,7 +2984,8 @@ fun PlaybackSeekBar(
     onSeekTo: (Long) -> Unit,
     onInteraction: () -> Unit,
     controlsAlpha: Float = 1f,
-    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
+    songId: String = ""
 ) {
     val currentPosition by playbackPositionStateFlow.collectAsState()
     var dragPosition by remember { mutableStateOf<Float?>(null) }
@@ -2895,7 +3018,7 @@ fun PlaybackSeekBar(
             color = color.copy(alpha = 0.6f),
             fontSize = 10.sp
         )
-        Slider(
+        WavyProgressSlider(
             value = sliderProgress,
             onValueChange = {
                 onInteraction()
@@ -2906,14 +3029,11 @@ fun PlaybackSeekBar(
                 onSeekTo(seekMs)
                 dragPosition = null
             },
-            colors = SliderDefaults.colors(
-                thumbColor = color,
-                activeTrackColor = color,
-                inactiveTrackColor = color.copy(alpha = 0.2f)
-            ),
+            color = color,
+            songId = songId,
             modifier = Modifier
                 .weight(1f)
-                .height(18.dp)
+                .height(24.dp)
         )
         Text(
             text = formatTime(duration),

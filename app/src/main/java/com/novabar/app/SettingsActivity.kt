@@ -1328,6 +1328,43 @@ fun DiagnosticsDashboard(
                     }
                 }
 
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            com.novabar.app.domain.OverlayStateManager.mediaState.value = 
+                                com.novabar.app.domain.MediaState(
+                                    isPlaying = true,
+                                    title = "Citizen - Sun Kisses",
+                                    artist = "Citizen",
+                                    progress = 0.592f,
+                                    duration = 238000L,
+                                    position = 141000L,
+                                    albumArt = null,
+                                    appName = "YouTube"
+                                )
+                            Toast.makeText(context, "Injected Test Media", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Test Media", fontSize = 10.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            com.novabar.app.domain.OverlayStateManager.mediaState.value = null
+                            com.novabar.app.domain.OverlayStateManager.phoneCallState.value = null
+                            com.novabar.app.domain.OverlayStateManager.dismissNotification()
+                            com.novabar.app.domain.OverlayStateManager.setTimerState(null)
+                            Toast.makeText(context, "Cleared States", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text("Clear States", fontSize = 10.sp, maxLines = 1)
+                    }
+                }
+
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                 // Logging, Copying & Sharing buttons
