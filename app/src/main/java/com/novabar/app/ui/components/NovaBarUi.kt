@@ -398,6 +398,8 @@ fun NovaBarUi() {
     val isStatusBarSyncVisible = if (settings.followStatusBarVisibility) systemBarVisible else true
     val showOverlay = (activeStateKey != "Idle" || settings.alwaysOnBar) && isStatusBarSyncVisible
 
+
+
     // Dimensions
     val borderThickness = settings.barBorderThickness.dp
 
@@ -568,6 +570,7 @@ fun NovaBarUi() {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = rootAlignment
         ) {
+
             val activeStateMap = remember {
                 mutableStateMapOf<String, OverlayState>().apply {
                     val initial = viewModel.activeState.value

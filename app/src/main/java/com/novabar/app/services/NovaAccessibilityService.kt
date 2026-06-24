@@ -16,6 +16,7 @@ import com.novabar.app.data.SettingsRepository
 import com.novabar.app.data.NovaSettings
 import com.novabar.app.data.OverlayEngine
 import com.novabar.app.domain.DiagnosticsManager
+import com.novabar.app.domain.OverlayStateManager
 import com.novabar.app.utils.LuminanceManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
@@ -105,9 +106,7 @@ class NovaAccessibilityService : AccessibilityService() {
         
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
-            
-            // Run prototype diagnostics logging on interactive windows
-            diagnoseInteractiveWindows(eventTypeStr)
+            checkImmersiveMode()
         }
         
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
@@ -122,44 +121,35 @@ class NovaAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun diagnoseInteractiveWindows(eventType: String) {
+    private fun checkImmersiveMode() {
         val windowsList = try {
             windows
         } catch (e: Exception) {
-            Log.e(tag, "DIAG_LOG: Failed to query windows from accessibility service: ${e.message}")
+            Log.e(tag, "Failed to query windows: ${e.message}")
             null
         }
         
-        Log.d("SystemBarVisibility", "DIAG_LOG: diagnoseInteractiveWindows invoked on event=$eventType. Windows count: ${windowsList?.size ?: "null"}")
-        
-        if (windowsList == null) return
+        if (windowsList == null || windowsList.isEmpty()) {
+            return
+        }
         
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-        Log.d("SystemBarVisibility", "DIAG_LOG: Screen dimensions resolved: ${screenWidth}x${screenHeight} px")
         
-        windowsList.forEachIndexed { index, window ->
-            val bounds = android.graphics.Rect()
-            window.getBoundsInScreen(bounds)
-            
-            val typeStr = when (window.type) {
-                AccessibilityWindowInfo.TYPE_APPLICATION -> "TYPE_APPLICATION"
-                AccessibilityWindowInfo.TYPE_INPUT_METHOD -> "TYPE_INPUT_METHOD"
-                AccessibilityWindowInfo.TYPE_SYSTEM -> "TYPE_SYSTEM"
-                AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY -> "TYPE_ACCESSIBILITY_OVERLAY"
-                AccessibilityWindowInfo.TYPE_SPLIT_SCREEN_DIVIDER -> "TYPE_SPLIT_SCREEN_DIVIDER"
-                else -> "UNKNOWN (${window.type})"
+        var isStatusBarWindowVisible = false
+        for (window in windowsList) {
+            if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
+                val bounds = Rect()
+                window.getBoundsInScreen(bounds)
+                if (bounds.top == 0 && bounds.left == 0 && bounds.bottom > 0 && bounds.height() < 120 && bounds.width() >= screenWidth) {
+                    isStatusBarWindowVisible = true
+                    break
+                }
             }
-            
-            val titleStr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                window.title?.toString() ?: "No Title"
-            } else {
-                "Title API >= 24 only"
-            }
-            
-            Log.d("SystemBarVisibility", "DIAG_LOG: Window [#$index] -> Type: $typeStr, Bounds: $bounds, Active: ${window.isActive}, Focused: ${window.isFocused}, Title: $titleStr, Layer: ${window.layer}")
         }
+        
+        Log.d("SystemBarVisibility", "checkImmersiveMode: isStatusBarVisible=$isStatusBarWindowVisible")
+        OverlayStateManager.systemBarVisible.value = isStatusBarWindowVisible
     }
 
     override fun onInterrupt() {

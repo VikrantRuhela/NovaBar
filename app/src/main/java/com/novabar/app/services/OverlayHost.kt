@@ -255,8 +255,12 @@ class OverlayHost(private val context: Context) {
             visibilityProvider = provider
             scope?.launch {
                 provider.isStatusBarVisible.collect { visible ->
-                    Log.d("OverlayHost", "DIAG_LOG: SystemBarVisibilityProvider emitted isStatusBarVisible = $visible -> Updating OverlayStateManager.systemBarVisible")
-                    OverlayStateManager.systemBarVisible.value = visible
+                    if (com.novabar.app.services.NovaAccessibilityService.getInstance() == null) {
+                        Log.d("OverlayHost", "SystemBarVisibilityProvider emitted isStatusBarVisible = $visible -> Updating OverlayStateManager.systemBarVisible")
+                        OverlayStateManager.systemBarVisible.value = visible
+                    } else {
+                        Log.d("OverlayHost", "NovaAccessibilityService is running, ignoring SystemBarVisibilityProvider emission ($visible)")
+                    }
                 }
             }
         }
