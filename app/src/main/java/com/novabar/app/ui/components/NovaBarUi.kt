@@ -2861,7 +2861,7 @@ fun MediaControlsSection(
 fun WavyProgressSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
-    onValueChangeFinished: () -> Unit,
+    onValueChangeFinished: (Float) -> Unit,
     color: Color,
     songId: String,
     modifier: Modifier = Modifier
@@ -2889,6 +2889,9 @@ fun WavyProgressSlider(
     }
 
     val progressX = width * value
+    
+    val latestOnValueChange by rememberUpdatedState(onValueChange)
+    val latestOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
 
     Box(
         modifier = modifier
@@ -2902,8 +2905,8 @@ fun WavyProgressSlider(
                     while (true) {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val startX = down.position.x
-                        val initialValue = (startX / width).coerceIn(0f, 1f)
-                        onValueChange(initialValue)
+                        var currentValue = (startX / width).coerceIn(0f, 1f)
+                        latestOnValueChange(currentValue)
                         
                         var isDragging = false
                         val pointerId = down.id
@@ -2912,7 +2915,7 @@ fun WavyProgressSlider(
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == pointerId }
                             if (change == null || !change.pressed) {
-                                onValueChangeFinished()
+                                latestOnValueChangeFinished(currentValue)
                                 break
                             }
                             
@@ -2922,8 +2925,8 @@ fun WavyProgressSlider(
                             }
                             
                             if (isDragging) {
-                                val newValue = (currentX / width).coerceIn(0f, 1f)
-                                onValueChange(newValue)
+                                currentValue = (currentX / width).coerceIn(0f, 1f)
+                                latestOnValueChange(currentValue)
                                 change.consume()
                             }
                         }
@@ -3024,8 +3027,8 @@ fun PlaybackSeekBar(
                 onInteraction()
                 dragPosition = it
             },
-            onValueChangeFinished = {
-                val seekMs = (sliderProgress * duration).toLong()
+            onValueChangeFinished = { finalValue ->
+                val seekMs = (finalValue * duration).toLong()
                 onSeekTo(seekMs)
                 dragPosition = null
             },
