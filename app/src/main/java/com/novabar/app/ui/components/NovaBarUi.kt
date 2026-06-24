@@ -2603,7 +2603,8 @@ fun MediaView(
                     onInteraction = onInteraction,
                     controlsAlpha = controlsAlpha,
                     controlsOffsetY = controlsOffsetY,
-                    songId = state.title + "_" + state.artist
+                    songId = state.title + "_" + state.artist,
+                    isPlaying = state.isPlaying
                 )
 
                 MediaControlsSection(
@@ -2864,6 +2865,7 @@ fun WavyProgressSlider(
     onValueChangeFinished: (Float) -> Unit,
     color: Color,
     songId: String,
+    isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
     var width by remember { mutableStateOf(1f) }
@@ -2879,7 +2881,8 @@ fun WavyProgressSlider(
             if (width > 1f) {
                 moveTo(0f, 0f)
                 var x = 0f
-                while (x <= width) {
+                val limit = width + wavelength
+                while (x <= limit) {
                     val y = amplitude * kotlin.math.sin(2.0 * Math.PI * x / wavelength).toFloat()
                     lineTo(x, y)
                     x += 2f
@@ -2890,6 +2893,25 @@ fun WavyProgressSlider(
 
     val progressX = width * value
     
+    var phase by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            val speed = 2.0 * Math.PI / 4.0 // 1 complete cycle every 4 seconds
+            var lastTime = android.os.SystemClock.elapsedRealtime()
+            while (true) {
+                withFrameNanos {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val delta = (now - lastTime) / 1000f
+                    lastTime = now
+                    phase = (phase + speed * delta).toFloat() % (2f * Math.PI.toFloat())
+                }
+            }
+        }
+    }
+
+    val dx = (phase / (2f * Math.PI.toFloat())) * wavelength
+
     val latestOnValueChange by rememberUpdatedState(onValueChange)
     val latestOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
 
@@ -2955,7 +2977,7 @@ fun WavyProgressSlider(
                 right = progressX,
                 bottom = size.height
             ) {
-                translate(top = cy) {
+                translate(left = -dx, top = cy) {
                     drawPath(
                         path = fullPath,
                         color = color,
@@ -2969,7 +2991,7 @@ fun WavyProgressSlider(
             }
             
             // Draw progress thumb
-            val yProgress = cy + amplitude * kotlin.math.sin(2.0 * Math.PI * progressX / wavelength).toFloat()
+            val yProgress = cy + amplitude * kotlin.math.sin(2.0 * Math.PI * (progressX + dx) / wavelength).toFloat()
             drawCircle(
                 color = color,
                 radius = thumbRadius,
@@ -2988,7 +3010,8 @@ fun PlaybackSeekBar(
     onInteraction: () -> Unit,
     controlsAlpha: Float = 1f,
     controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
-    songId: String = ""
+    songId: String = "",
+    isPlaying: Boolean = false
 ) {
     val currentPosition by playbackPositionStateFlow.collectAsState()
     var dragPosition by remember { mutableStateOf<Float?>(null) }
@@ -3034,6 +3057,7 @@ fun PlaybackSeekBar(
             },
             color = color,
             songId = songId,
+            isPlaying = isPlaying,
             modifier = Modifier
                 .weight(1f)
                 .height(24.dp)
