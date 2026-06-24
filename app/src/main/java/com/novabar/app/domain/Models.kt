@@ -85,6 +85,11 @@ data class TorchState(
     val isStrengthSupported: Boolean = false
 )
 
+data class HotspotState(
+    val isActive: Boolean = false,
+    val isDisableSupported: Boolean = false
+)
+
 sealed class OverlayState {
     object Idle : OverlayState()
     data class Charging(val data: ChargingState) : OverlayState()
@@ -95,4 +100,5 @@ sealed class OverlayState {
     data class Media(val data: MediaState) : OverlayState()
     data class PhoneCall(val data: PhoneCallState) : OverlayState()
     data class Torch(val data: TorchState) : OverlayState()
+    data class Hotspot(val data: HotspotState) : OverlayState()
 }

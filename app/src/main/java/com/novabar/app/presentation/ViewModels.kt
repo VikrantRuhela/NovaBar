@@ -27,6 +27,10 @@ class OverlayViewModel(private val repository: SettingsRepository) : ViewModel()
     fun dismissNotification() {
         OverlayStateManager.dismissNotification()
     }
+
+    fun disableHotspot(context: Context) {
+        OverlayStateManager.disableHotspot(context)
+    }
 }
 
 class SettingsViewModel(private val repository: SettingsRepository) : ViewModel() {

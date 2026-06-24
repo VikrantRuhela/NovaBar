@@ -28,6 +28,7 @@ object OverlayStateManager {
     val navigationState = MutableStateFlow<NavigationState?>(null)
     val phoneCallState = MutableStateFlow<PhoneCallState?>(null)
     val torchState = MutableStateFlow<TorchState?>(null)
+    val hotspotState = MutableStateFlow<HotspotState?>(null)
     
     private val _chargingState = MutableStateFlow<ChargingState?>(null)
     private var chargingJob: Job? = null
@@ -108,7 +109,8 @@ object OverlayStateManager {
         mediaState,
         _notificationState,
         isNotificationActive,
-        torchState
+        torchState,
+        hotspotState
     ) { array ->
         val list = mutableListOf<OverlayState>()
         
@@ -122,6 +124,7 @@ object OverlayStateManager {
         val notification = array[7] as NotificationState?
         val notificationActive = array[8] as Boolean
         val torch = array[9] as TorchState?
+        val hotspot = array[10] as HotspotState?
 
         // Call (Priority 1)
         if (call != null && call.isActive) {
@@ -139,18 +142,22 @@ object OverlayStateManager {
         if (media != null && media.title.isNotEmpty()) {
             list.add(OverlayState.Media(media))
         }
-        // Charging (Priority 5)
+        // Hotspot (Priority 5)
+        if (hotspot != null && hotspot.isActive) {
+            list.add(OverlayState.Hotspot(hotspot))
+        }
+        // Charging (Priority 6)
         if (chargingActive && charging != null) {
             list.add(OverlayState.Charging(charging))
         }
-        // Timer/Stopwatch (Priority 6)
+        // Timer/Stopwatch (Priority 7)
         if (timer != null && (timer.isRunning || timer.remainingMs > 0)) {
             list.add(OverlayState.Timer(timer))
         }
         if (stopwatch != null && (stopwatch.isRunning || stopwatch.elapsedMs > 0)) {
             list.add(OverlayState.Stopwatch(stopwatch))
         }
-        // Notification (Priority 7)
+        // Notification (Priority 8)
         if (notificationActive && notification != null) {
             list.add(OverlayState.Notification(notification))
         }
@@ -221,6 +228,14 @@ object OverlayStateManager {
             activeState.collect { state ->
                 DiagnosticsManager.currentPresentationState.value = state::class.java.simpleName
             }
+        }
+    }
+
+    fun disableHotspot(context: Context) {
+        Log.d("NovaBar", "HOTSPOT_DISABLE_BUTTON_CLICKED")
+        val success = com.novabar.app.utils.HotspotManager.disableHotspot(context)
+        if (success) {
+            collapse()
         }
     }
 

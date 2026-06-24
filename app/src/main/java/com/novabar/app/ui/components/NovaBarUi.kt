@@ -228,6 +228,7 @@ fun NovaBarUi() {
                 is OverlayState.Media -> "Media"
                 is OverlayState.PhoneCall -> "PhoneCall"
                 is OverlayState.Torch -> "Torch"
+                is OverlayState.Hotspot -> "Hotspot"
             }
         }.distinctUntilChanged()
     }.collectAsState(initial = "Idle")
@@ -586,6 +587,7 @@ fun NovaBarUi() {
                         is OverlayState.Media -> "Media"
                         is OverlayState.PhoneCall -> "PhoneCall"
                         is OverlayState.Torch -> "Torch"
+                        is OverlayState.Hotspot -> "Hotspot"
                     }
                     put(key, initial)
                 }
@@ -602,6 +604,7 @@ fun NovaBarUi() {
                         is OverlayState.Media -> "Media"
                         is OverlayState.PhoneCall -> "PhoneCall"
                         is OverlayState.Torch -> "Torch"
+                        is OverlayState.Hotspot -> "Hotspot"
                     }
                     activeStateMap[key] = state
                 }
@@ -701,6 +704,18 @@ fun NovaBarUi() {
                                     }
                                 )
                             }
+                            is OverlayState.Hotspot -> {
+                                HotspotView(
+                                    state = state.data,
+                                    currentState = stateTargetState,
+                                    color = foregroundColor,
+                                    textSizeOffset = textSizeOffset,
+                                    splitSegment = segment,
+                                    onTurnOffClick = {
+                                        viewModel.disableHotspot(context)
+                                    }
+                                )
+                            }
                             is OverlayState.Idle -> {
                                 if (settings.alwaysOnBar) {
                                     AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset, segment)
@@ -783,12 +798,19 @@ fun NovaBarUi() {
                             // Since the finger was already released within 500ms to exit longPressResult,
                             // we can execute the tap/expand action immediately.
                             if (activeStateKey != "Idle") {
-                                if (activeStateKey == "Media") {
-                                    DiagnosticsManager.expandClickTime = System.currentTimeMillis()
-                                    Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
+                                val currentStateObj = viewModel.activeState.value
+                                var canExpand = true
+                                if (currentStateObj is OverlayState.Hotspot && !currentStateObj.data.isDisableSupported) {
+                                    canExpand = false
                                 }
-                                OverlayStateManager.expand()
-                                userInteractionTick = System.currentTimeMillis()
+                                if (canExpand) {
+                                    if (activeStateKey == "Media") {
+                                        DiagnosticsManager.expandClickTime = System.currentTimeMillis()
+                                        Log.d("NovaBar", "MEDIA_EXPAND_CLICK")
+                                    }
+                                    OverlayStateManager.expand()
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
                             }
                         }
                     }
@@ -3303,4 +3325,164 @@ fun TorchView(
         }
     }
 }
+
+@Composable
+fun HotspotIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        
+        // Center dot
+        drawCircle(
+            color = color,
+            radius = w * 0.12f,
+            center = Offset(cx, cy)
+        )
+        
+        // Inner ring
+        drawCircle(
+            color = color,
+            radius = w * 0.28f,
+            center = Offset(cx, cy),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.08f)
+        )
+        
+        // Outer ring
+        drawCircle(
+            color = color,
+            radius = w * 0.44f,
+            center = Offset(cx, cy),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.08f)
+        )
+    }
+}
+
+@Composable
+fun HotspotView(
+    state: HotspotState,
+    currentState: NowBarState,
+    color: Color,
+    textSizeOffset: Float,
+    splitSegment: SplitSegment? = null,
+    onTurnOffClick: () -> Unit
+) {
+    val sizeOffset = textSizeOffset
+
+    if (splitSegment != null) {
+        if (splitSegment == SplitSegment.LEFT) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val iconSize = if (currentState == NowBarState.MINIMIZED) 12.dp else 14.dp
+                HotspotIcon(color = color, modifier = Modifier.size(iconSize))
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Hotspot",
+                    color = color,
+                    fontSize = (if (currentState == NowBarState.MINIMIZED) 11f else 12f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        return
+    }
+
+    when (currentState) {
+        NowBarState.MINIMIZED -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+            ) {
+                HotspotIcon(color = color, modifier = Modifier.size(12.dp))
+                Text(
+                    text = "Hotspot",
+                    color = color,
+                    fontSize = (11f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        NowBarState.COMPACT -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HotspotIcon(color = color, modifier = Modifier.size(14.dp))
+                Text(
+                    text = "Hotspot",
+                    color = color,
+                    fontSize = (12f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
+        NowBarState.EXPANDED -> {
+            if (state.isDisableSupported) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HotspotIcon(color = color, modifier = Modifier.size(24.dp))
+                        Column {
+                            Text(
+                                text = "Hotspot Active",
+                                color = color,
+                                fontSize = (15f + sizeOffset).sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    
+                    Button(
+                        onClick = onTurnOffClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = color.copy(alpha = 0.15f),
+                            contentColor = color
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Text(
+                            text = "Turn Off",
+                            fontSize = (13f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 
