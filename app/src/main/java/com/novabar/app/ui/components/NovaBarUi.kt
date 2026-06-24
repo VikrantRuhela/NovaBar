@@ -2972,7 +2972,7 @@ fun WavyProgressSlider(
             
             // Draw played portion (sine wave)
             clipRect(
-                left = -strokeWidth - 10f,
+                left = 0f,
                 top = 0f,
                 right = progressX,
                 bottom = size.height
@@ -2988,6 +2988,16 @@ fun WavyProgressSlider(
                         )
                     )
                 }
+            }
+            
+            // Draw start round cap for the wave if progress > 0
+            if (progressX > 0f) {
+                val yStart = cy + amplitude * kotlin.math.sin(2.0 * Math.PI * dx / wavelength).toFloat()
+                drawCircle(
+                    color = color,
+                    radius = strokeWidth / 2f,
+                    center = Offset(0f, yStart)
+                )
             }
             
             // Draw progress thumb
@@ -3061,6 +3071,7 @@ fun PlaybackSeekBar(
             modifier = Modifier
                 .weight(1f)
                 .height(24.dp)
+                .padding(horizontal = 8.dp)
         )
         Text(
             text = formatTime(duration),
