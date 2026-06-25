@@ -758,7 +758,9 @@ class NovaNotificationListener : NotificationListenerService() {
                 }
 
                 // 2. Check if Clock app (Timer or Stopwatch)
-                val isClock = packageName.contains("clock") || packageName.contains("deskclock") || packageName.contains("alarm")
+                val isClock = packageName.contains("clock", ignoreCase = true) || 
+                        packageName.contains("deskclock", ignoreCase = true) || 
+                        packageName.contains("alarm", ignoreCase = true)
                 val showChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
                 val actions = notification.actions ?: emptyArray()
                 val actionTitles = actions.map { it.title.toString().lowercase() }
@@ -770,207 +772,20 @@ class NovaNotificationListener : NotificationListenerService() {
                 
                 val isClockLike = isClock || showChronometer || hasClockActions
                 if (isClockLike) {
-                    val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-                    val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-                    
-                    val isCountDown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        extras.getBoolean("android.chronometerCountDown", false)
-                    } else {
-                        false
-                    }
-
-                    val isStopwatch = title.lowercase().contains("stopwatch") || 
-                            text.lowercase().contains("stopwatch") || 
-                            actionTitles.any { it.contains("lap") || it.contains("split") } ||
-                            (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1"))
-                    
-                    val isTimer = title.lowercase().contains("timer") || 
-                            text.lowercase().contains("timer") || 
-                            isCountDown ||
-                            actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") }
-                    
-                    val whenTime = notification.`when`
-                    
-                    Log.i("NovaBar-Clock", "Clock/Chronometer notification posted:\n" +
-                            "Package: $packageName\n" +
-                            "Title: '$title'\n" +
-                            "Text: '$text'\n" +
-                            "isCountDown: $isCountDown\n" +
-                            "showChronometer: $showChronometer\n" +
-                            "whenTime: $whenTime\n" +
-                            "Actions: $actionTitles\n" +
-                            "isStopwatch: $isStopwatch\n" +
-                            "isTimer: $isTimer\n" +
-                            "stopwatchEnabled: ${settings.stopwatchEnabled}\n" +
-                            "timerEnabled: ${settings.timerEnabled}\n" +
-                            "Extras: ${com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)}")
-
-                    val chronometerFields = "when=$whenTime, showChronometer=$showChronometer, chronometerCountDown=$isCountDown"
-                    val extrasStr = com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)
-
-                    if (isStopwatch) {
-                        val accepted = settings.stopwatchEnabled
-                        val reason = if (accepted) {
-                            "Matched stopwatch pattern (title/text contains 'stopwatch' or action has 'lap'/'split' or 'pause'+'reset') and settings.stopwatchEnabled is true."
-                        } else {
-                            "Matched stopwatch pattern, but rejected because settings.stopwatchEnabled is false."
+                    when (val clockState = com.novabar.app.utils.ClockCompatibilityLayer.parse(sbn, settings, this@NovaNotificationListener)) {
+                        is com.novabar.app.utils.ParsedClockState.Stopwatch -> {
+                            activeStopwatchSbn = sbn
+                            OverlayStateManager.setStopwatchState(clockState.state)
+                            return@launch
                         }
-                        com.novabar.app.utils.DeveloperLogger.log(
-                            applicationContext,
-                            "STOPWATCH_DETECTION",
-                            "Package: $packageName\n" +
-                            "Title: $title\n" +
-                            "Extras: $extrasStr\n" +
-                            "Chronometer Fields: $chronometerFields\n" +
-                            "Detection Result: ${if (accepted) "ACCEPTED" else "REJECTED"}\n" +
-                            "Reason: $reason"
-                        )
-                    }
-
-                    if (isTimer) {
-                        val accepted = settings.timerEnabled
-                        val reason = if (accepted) {
-                            "Matched timer pattern (title/text contains 'timer' or isCountDown is true or action has '+1'/'add'/'cancel') and settings.timerEnabled is true."
-                        } else {
-                            "Matched timer pattern, but rejected because settings.timerEnabled is false."
+                        is com.novabar.app.utils.ParsedClockState.Timer -> {
+                            activeTimerSbn = sbn
+                            OverlayStateManager.setTimerState(clockState.state)
+                            return@launch
                         }
-                        com.novabar.app.utils.DeveloperLogger.log(
-                            applicationContext,
-                            "TIMER_DETECTION",
-                            "Package: $packageName\n" +
-                            "Title: $title\n" +
-                            "Extras: $extrasStr\n" +
-                            "Chronometer Fields: $chronometerFields\n" +
-                            "Detection Result: ${if (accepted) "ACCEPTED" else "REJECTED"}\n" +
-                            "Reason: $reason"
-                        )
-                    }
-
-                    if (!isStopwatch && !isTimer) {
-                        com.novabar.app.utils.DeveloperLogger.log(
-                            applicationContext,
-                            "CLOCK_DETECTION",
-                            "Package: $packageName\n" +
-                            "Title: $title\n" +
-                            "Extras: $extrasStr\n" +
-                            "Chronometer Fields: $chronometerFields\n" +
-                            "Detection Result: REJECTED\n" +
-                            "Reason: Clock notification did not match stopwatch or timer pattern."
-                        )
-                    }
-                    
-                    if (isStopwatch && settings.stopwatchEnabled) {
-                        activeStopwatchSbn = sbn
-                        val isRunning = (title.lowercase().contains("running") ||
-                                text.lowercase().contains("running") ||
-                                actionTitles.any { it.contains("pause") || it.contains("lap") }) &&
-                                !title.lowercase().contains("paused") &&
-                                !text.lowercase().contains("paused")
-                        
-                        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-                        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-                        val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
-
-                        val elapsedMs = if (showChronometer && whenTime > 0) {
-                            System.currentTimeMillis() - whenTime
-                        } else {
-                            parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
+                        com.novabar.app.utils.ParsedClockState.None -> {
+                            // Do nothing, let it flow to other notification handlers
                         }
-                        val startElapsedRealtime = if (isRunning) {
-                            android.os.SystemClock.elapsedRealtime() - elapsedMs
-                        } else {
-                            0L
-                        }
-                        Log.i("NovaBar-Stopwatch", "Activity registration: registering stopwatch. isRunning=$isRunning, elapsedMs=$elapsedMs, startElapsedRealtime=$startElapsedRealtime")
-                        OverlayStateManager.setStopwatchState(StopwatchState(
-                            isRunning = isRunning,
-                            elapsedMs = elapsedMs,
-                            hasPause = hasPause,
-                            hasResume = hasResume,
-                            hasLap = hasLap,
-                            startElapsedRealtime = startElapsedRealtime,
-                            showSeconds = settings.showSeconds
-                        ))
-                        return@launch
-                    } else if (isTimer && settings.timerEnabled) {
-                        activeTimerSbn = sbn
-                        
-                        var miuiTimerWhen: Long? = null
-                        var miuiTimerSystemCurrent: Long? = null
-                        var miuiIsRunning: Boolean? = null
-                        var miuiDurationMs: Long? = null
-                        
-                        val miuiFocusParam = extras.getString("miui.focus.param")
-                        if (!miuiFocusParam.isNullOrEmpty()) {
-                            try {
-                                val json = org.json.JSONObject(miuiFocusParam)
-                                val timerWhen = json.optLong("timerWhen", 0L)
-                                val timerSystemCurrent = json.optLong("timerSystemCurrent", 0L)
-                                val timerTotal = json.optLong("timerTotal", 0L)
-                                val timerType = json.optInt("timerType", 0)
-                                
-                                if (timerWhen > 0 && timerSystemCurrent > 0) {
-                                    miuiTimerWhen = timerWhen
-                                    miuiTimerSystemCurrent = timerSystemCurrent
-                                    miuiIsRunning = timerType == -1
-                                    miuiDurationMs = timerTotal
-                                    Log.i("NovaBar-Timer", "Parsed MIUI focus param: timerWhen=$timerWhen, timerSystemCurrent=$timerSystemCurrent, isRunning=$miuiIsRunning, durationMs=$miuiDurationMs")
-                                }
-                            } catch (e: Exception) {
-                                Log.e("NovaBar-Timer", "Failed to parse miui.focus.param: ${e.message}")
-                            }
-                        }
-
-                        val isRunning = if (miuiIsRunning != null) {
-                            miuiIsRunning || actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") }
-                        } else {
-                            actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") } || (showChronometer && isCountDown)
-                        }
-
-                        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-                        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-                        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
-
-                        val remainingMs = (if (miuiTimerWhen != null && miuiTimerSystemCurrent != null) {
-                            if (isRunning) {
-                                miuiTimerWhen - System.currentTimeMillis()
-                            } else {
-                                miuiTimerWhen - miuiTimerSystemCurrent
-                            }
-                        } else if (showChronometer && whenTime > 0) {
-                            whenTime - System.currentTimeMillis()
-                        } else {
-                            parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
-                        }).coerceAtLeast(0L)
-                        
-                        val targetEndElapsedRealtime = if (isRunning) {
-                            android.os.SystemClock.elapsedRealtime() + remainingMs
-                        } else {
-                            0L
-                        }
-                        
-                        val currentTimer = OverlayStateManager.timerState.value
-                        val durationMs = if (miuiDurationMs != null) {
-                            miuiDurationMs
-                        } else if (remainingMs > 0) {
-                            if (currentTimer != null && currentTimer.durationMs > remainingMs) currentTimer.durationMs else remainingMs
-                        } else {
-                            0L
-                        }
-
-                        Log.i("NovaBar-Timer", "Activity registration: registering timer. isRunning=$isRunning, durationMs=$durationMs, remainingMs=$remainingMs, targetEndElapsedRealtime=$targetEndElapsedRealtime")
-                        OverlayStateManager.setTimerState(TimerState(
-                            isRunning = isRunning,
-                            durationMs = durationMs,
-                            remainingMs = remainingMs,
-                            label = if (title.lowercase().contains("timer")) text else title,
-                            hasPause = hasPause,
-                            hasResume = hasResume,
-                            hasReset = hasReset,
-                            targetEndElapsedRealtime = targetEndElapsedRealtime,
-                            showSeconds = settings.showSeconds
-                        ))
-                        return@launch
                     }
                 }
 
@@ -1070,20 +885,15 @@ class NovaNotificationListener : NotificationListenerService() {
                 }
 
                 // Clear timer/stopwatch if clock notification removed
-                val isClock = packageName.contains("clock") || packageName.contains("deskclock") || packageName.contains("alarm")
-                if (isClock) {
-                    Log.i("NovaBar-Stopwatch", "Notification removed from package '$packageName'. activeStopwatchSbn key='${activeStopwatchSbn?.key}', removed key='${sbn.key}'")
-                    Log.i("NovaBar-Timer", "Notification removed from package '$packageName'. activeTimerSbn key='${activeTimerSbn?.key}', removed key='${sbn.key}'")
-                    if (activeTimerSbn?.key == sbn.key) {
-                        Log.i("NovaBar-Timer", "Activity removal: removing active timer state because notification was removed.")
-                        activeTimerSbn = null
-                        OverlayStateManager.setTimerState(null)
-                    }
-                    if (activeStopwatchSbn?.key == sbn.key) {
-                        Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification was removed.")
-                        activeStopwatchSbn = null
-                        OverlayStateManager.setStopwatchState(null)
-                    }
+                if (activeTimerSbn?.key == sbn.key) {
+                    Log.i("NovaBar-Timer", "Activity removal: removing active timer state because notification was removed.")
+                    activeTimerSbn = null
+                    OverlayStateManager.setTimerState(null)
+                }
+                if (activeStopwatchSbn?.key == sbn.key) {
+                    Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification was removed.")
+                    activeStopwatchSbn = null
+                    OverlayStateManager.setStopwatchState(null)
                 }
                 val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
                 DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0
