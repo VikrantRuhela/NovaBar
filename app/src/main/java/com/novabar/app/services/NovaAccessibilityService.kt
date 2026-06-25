@@ -141,7 +141,8 @@ class NovaAccessibilityService : AccessibilityService() {
             if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
                 val bounds = Rect()
                 window.getBoundsInScreen(bounds)
-                if (bounds.top == 0 && bounds.left == 0 && bounds.bottom > 0 && bounds.height() < 120 && bounds.width() >= screenWidth) {
+                val heightDp = bounds.height() / displayMetrics.density
+                if (bounds.top == 0 && bounds.left == 0 && bounds.bottom > 0 && heightDp < 100 && bounds.width() >= screenWidth) {
                     isStatusBarWindowVisible = true
                     break
                 }
