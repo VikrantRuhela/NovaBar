@@ -777,6 +777,16 @@ class NovaNotificationListener : NotificationListenerService() {
                     val whenTime = notification.`when`
                     val showChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
                     
+                    Log.i("NovaBar-Stopwatch", "Clock notification posted: package='$packageName', title='$title', text='$text', isCountDown=$isCountDown, actions=$actionTitles")
+                    Log.i("NovaBar-Stopwatch", "Chronometer fields: when=$whenTime, showChronometer=$showChronometer")
+                    Log.i("NovaBar-Stopwatch", "Extras: ${com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)}")
+                    Log.i("NovaBar-Stopwatch", "Validation: isStopwatch=$isStopwatch, stopwatchEnabled=${settings.stopwatchEnabled}")
+
+                    Log.i("NovaBar-Timer", "Clock notification posted: package='$packageName', title='$title', text='$text', isCountDown=$isCountDown, actions=$actionTitles")
+                    Log.i("NovaBar-Timer", "Chronometer fields: when=$whenTime, showChronometer=$showChronometer")
+                    Log.i("NovaBar-Timer", "Extras: ${com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)}")
+                    Log.i("NovaBar-Timer", "Validation: isTimer=$isTimer, timerEnabled=${settings.timerEnabled}")
+
                     val chronometerFields = "when=$whenTime, showChronometer=$showChronometer, chronometerCountDown=$isCountDown"
                     val extrasStr = com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)
 
@@ -849,6 +859,7 @@ class NovaNotificationListener : NotificationListenerService() {
                         } else {
                             0L
                         }
+                        Log.i("NovaBar-Stopwatch", "Activity registration: registering stopwatch. isRunning=$isRunning, elapsedMs=$elapsedMs, startElapsedRealtime=$startElapsedRealtime")
                         OverlayStateManager.setStopwatchState(StopwatchState(
                             isRunning = isRunning,
                             elapsedMs = elapsedMs,
@@ -885,6 +896,7 @@ class NovaNotificationListener : NotificationListenerService() {
                             0L
                         }
 
+                        Log.i("NovaBar-Timer", "Activity registration: registering timer. isRunning=$isRunning, durationMs=$durationMs, remainingMs=$remainingMs, targetEndElapsedRealtime=$targetEndElapsedRealtime")
                         OverlayStateManager.setTimerState(TimerState(
                             isRunning = isRunning,
                             durationMs = durationMs,
@@ -997,11 +1009,15 @@ class NovaNotificationListener : NotificationListenerService() {
                 // Clear timer/stopwatch if clock notification removed
                 val isClock = packageName.contains("clock") || packageName.contains("deskclock") || packageName.contains("alarm")
                 if (isClock) {
+                    Log.i("NovaBar-Stopwatch", "Notification removed from package '$packageName'. activeStopwatchSbn key='${activeStopwatchSbn?.key}', removed key='${sbn.key}'")
+                    Log.i("NovaBar-Timer", "Notification removed from package '$packageName'. activeTimerSbn key='${activeTimerSbn?.key}', removed key='${sbn.key}'")
                     if (activeTimerSbn?.key == sbn.key) {
+                        Log.i("NovaBar-Timer", "Activity removal: removing active timer state because notification was removed.")
                         activeTimerSbn = null
                         OverlayStateManager.setTimerState(null)
                     }
                     if (activeStopwatchSbn?.key == sbn.key) {
+                        Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification was removed.")
                         activeStopwatchSbn = null
                         OverlayStateManager.setStopwatchState(null)
                     }
