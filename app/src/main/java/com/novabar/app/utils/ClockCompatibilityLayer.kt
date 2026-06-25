@@ -101,6 +101,12 @@ class LoggingClockProvider(private val oemTag: String, private val delegate: Clo
 object GoogleClockProvider : ClockProvider {
     private const val TAG = "GoogleClockProvider"
     
+    private data class ExtractedRemoteViewsData(
+        val textValues: List<String>,
+        val baseTimeMs: Long?,
+        val isCountDown: Boolean?
+    )
+    
     override fun parse(sbn: StatusBarNotification, settings: NovaSettings, context: Context): ParsedClockState {
         val notification = sbn.notification
         val extras = notification.extras ?: android.os.Bundle()
@@ -122,14 +128,24 @@ object GoogleClockProvider : ClockProvider {
         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
         
+        // Extract texts and timing details from RemoteViews
+        val extractedData = extractDataFromRemoteViews(notification)
+        val remoteViewsTexts = extractedData.textValues
+        val hasStopwatchText = remoteViewsTexts.any { it.lowercase().contains("stopwatch") }
+        val hasTimerText = remoteViewsTexts.any { it.lowercase().contains("timer") }
+
         val isStopwatch = title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
+                hasStopwatchText ||
                 hasLap ||
+                (extractedData.baseTimeMs != null && extractedData.isCountDown == false) ||
                 (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis())
                 
         val isTimer = !isStopwatch && (
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
+            hasTimerText ||
+            extractedData.isCountDown == true ||
             isCountDown ||
             actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") } ||
             (whenTime > System.currentTimeMillis()) ||
@@ -137,54 +153,67 @@ object GoogleClockProvider : ClockProvider {
         )
 
         // Log general Google Clock notification information
-        Log.d("GoogleClockCompat", "=== Google Clock Notification ===")
-        Log.d("GoogleClockCompat", "  Package: ${sbn.packageName}")
-        Log.d("GoogleClockCompat", "  ID: ${sbn.id}")
-        Log.d("GoogleClockCompat", "  Category: ${notification.category}")
-        Log.d("GoogleClockCompat", "  Title: '$title'")
-        Log.d("GoogleClockCompat", "  Text: '$text'")
-        Log.d("GoogleClockCompat", "  When: $whenTime")
-        Log.d("GoogleClockCompat", "  PostTime: ${sbn.postTime}")
-        Log.d("GoogleClockCompat", "  ShowChronometer: $showChronometer")
-        Log.d("GoogleClockCompat", "  IsCountDown: $isCountDown")
-        Log.d("GoogleClockCompat", "  Action Titles: $actionTitles")
-        Log.d("GoogleClockCompat", "  Classification: isStopwatch=$isStopwatch, isTimer=$isTimer")
+        Log.i("GoogleClockCompat", "=== Google Clock Notification ===")
+        Log.i("GoogleClockCompat", "  Package: ${sbn.packageName}")
+        Log.i("GoogleClockCompat", "  ID: ${sbn.id}")
+        Log.i("GoogleClockCompat", "  Category: ${notification.category}")
+        Log.i("GoogleClockCompat", "  Title: '$title'")
+        Log.i("GoogleClockCompat", "  Text: '$text'")
+        Log.i("GoogleClockCompat", "  When: $whenTime")
+        Log.i("GoogleClockCompat", "  PostTime: ${sbn.postTime}")
+        Log.i("GoogleClockCompat", "  ShowChronometer: $showChronometer")
+        Log.i("GoogleClockCompat", "  IsCountDown: $isCountDown")
+        Log.i("GoogleClockCompat", "  Action Titles: $actionTitles")
+        Log.i("GoogleClockCompat", "  Classification: isStopwatch=$isStopwatch, isTimer=$isTimer")
+        Log.i("GoogleClockCompat", "  RemoteViews Texts: $remoteViewsTexts")
+        Log.i("GoogleClockCompat", "  RemoteViews BaseMs: ${extractedData.baseTimeMs}, isCountDown: ${extractedData.isCountDown}")
         
         // Log all notification extras in detail
         try {
             val keys = extras.keySet()
-            Log.d("GoogleClockCompat", "  Extras bundle content (${keys.size} keys):")
+            Log.i("GoogleClockCompat", "  Extras bundle content (${keys.size} keys):")
             for (key in keys) {
-                Log.d("GoogleClockCompat", "    $key = ${extras.get(key)}")
+                Log.i("GoogleClockCompat", "    $key = ${extras.get(key)}")
             }
         } catch (e: Exception) {
             Log.e("GoogleClockCompat", "  Failed to print extras keys: ${e.message}")
         }
 
+        logRemoteViewsDetails(notification.contentView, "contentView")
+        logRemoteViewsDetails(notification.bigContentView, "bigContentView")
+        logRemoteViewsDetails(notification.headsUpContentView, "headsUpContentView")
+
         if (isStopwatch && settings.stopwatchEnabled) {
             val isRunning = hasPause || hasLap
             val currentStopwatch = OverlayStateManager.stopwatchState.value
             
-            val currentTime = System.currentTimeMillis()
-            val elapsedMs = if (showChronometer && whenTime > 0L && isRunning) {
-                currentTime - whenTime
+            val elapsedMs = if (isRunning && extractedData.baseTimeMs != null) {
+                (android.os.SystemClock.elapsedRealtime() - extractedData.baseTimeMs).coerceAtLeast(0L)
             } else {
-                val parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                var parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                if (parsed == null) {
+                    for (t in remoteViewsTexts) {
+                        val p = NovaNotificationListener.parseTimeToMs(t)
+                        if (p != null && p > 0L) {
+                            parsed = p
+                            break
+                        }
+                    }
+                }
                 parsed ?: if (currentStopwatch != null) currentStopwatch.elapsedMs else 0L
             }
             
             val startElapsedRealtime = if (isRunning) {
-                android.os.SystemClock.elapsedRealtime() - elapsedMs
+                extractedData.baseTimeMs ?: (android.os.SystemClock.elapsedRealtime() - elapsedMs)
             } else {
                 0L
             }
             
-            Log.d("GoogleClockCompat", "  Stopwatch Parsing Details:")
-            Log.d("GoogleClockCompat", "    isRunning: $isRunning")
-            Log.d("GoogleClockCompat", "    currentTime: $currentTime")
-            Log.d("GoogleClockCompat", "    elapsedMs: $elapsedMs")
-            Log.d("GoogleClockCompat", "    startElapsedRealtime: $startElapsedRealtime")
-            Log.d("GoogleClockCompat", "    currentStopwatchState: $currentStopwatch")
+            Log.i("GoogleClockCompat", "  Stopwatch Parsing Details:")
+            Log.i("GoogleClockCompat", "    isRunning: $isRunning")
+            Log.i("GoogleClockCompat", "    elapsedMs: $elapsedMs")
+            Log.i("GoogleClockCompat", "    startElapsedRealtime: $startElapsedRealtime")
+            Log.i("GoogleClockCompat", "    currentStopwatchState: $currentStopwatch")
             
             return ParsedClockState.Stopwatch(StopwatchState(
                 isRunning = isRunning,
@@ -201,40 +230,30 @@ object GoogleClockProvider : ClockProvider {
             val isRunning = hasPause || actionTitles.any { it.contains("+1") }
             val currentTimer = OverlayStateManager.timerState.value
             
-            // Align remaining time to text representation if available
-            val textRemainingMs = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
-            
-            val currentTime = System.currentTimeMillis()
-            var remainingMs = if (whenTime > currentTime) {
-                whenTime - currentTime
+            var remainingMs = if (isRunning && extractedData.baseTimeMs != null) {
+                (extractedData.baseTimeMs - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
             } else {
-                textRemainingMs ?: if (currentTimer != null) currentTimer.remainingMs else 0L
-            }
-
-            Log.d("GoogleClockCompat", "  Timer Parsing Details:")
-            Log.d("GoogleClockCompat", "    isRunning: $isRunning")
-            Log.d("GoogleClockCompat", "    currentTime: $currentTime")
-            Log.d("GoogleClockCompat", "    textRemainingMs: $textRemainingMs")
-            Log.d("GoogleClockCompat", "    raw remainingMs (from when or text): $remainingMs")
-
-            // Align chronometer remaining to the text value if they are close (within 1.5 seconds)
-            if (textRemainingMs != null && whenTime > currentTime) {
-                val diff = Math.abs(remainingMs - textRemainingMs)
-                Log.d("GoogleClockCompat", "    align check: diff=$diff ms")
-                if (diff < 1500L) {
-                    remainingMs = textRemainingMs
-                    Log.d("GoogleClockCompat", "    aligned remainingMs to text value: $remainingMs")
+                var parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                if (parsed == null) {
+                    for (t in remoteViewsTexts) {
+                        val p = NovaNotificationListener.parseTimeToMs(t)
+                        if (p != null && p > 0L) {
+                            parsed = p
+                            break
+                        }
+                    }
                 }
+                parsed ?: if (currentTimer != null) currentTimer.remainingMs else 0L
             }
-            
-            val durationMs = if (remainingMs > 0) {
+
+            Log.i("GoogleClockCompat", "  Timer Parsing Details:")
+            Log.i("GoogleClockCompat", "    isRunning: $isRunning")
+            Log.i("GoogleClockCompat", "    raw remainingMs (from base or text): $remainingMs")
+
+            val durationMs = if (currentTimer != null && currentTimer.durationMs > remainingMs) {
+                currentTimer.durationMs
+            } else {
                 remainingMs
-            } else {
-                if (currentTimer != null && currentTimer.durationMs > 0L) {
-                    currentTimer.durationMs
-                } else {
-                    0L
-                }
             }
 
             // Clamp remainingMs to durationMs to prevent overshoot
@@ -243,15 +262,15 @@ object GoogleClockProvider : ClockProvider {
             }
 
             val targetEndElapsedRealtime = if (isRunning) {
-                android.os.SystemClock.elapsedRealtime() + remainingMs
+                extractedData.baseTimeMs ?: (android.os.SystemClock.elapsedRealtime() + remainingMs)
             } else {
                 0L
             }
             
-            Log.d("GoogleClockCompat", "    final durationMs: $durationMs")
-            Log.d("GoogleClockCompat", "    final remainingMs: $remainingMs")
-            Log.d("GoogleClockCompat", "    targetEndElapsedRealtime: $targetEndElapsedRealtime")
-            Log.d("GoogleClockCompat", "    currentTimerState: $currentTimer")
+            Log.i("GoogleClockCompat", "    final durationMs: $durationMs")
+            Log.i("GoogleClockCompat", "    final remainingMs: $remainingMs")
+            Log.i("GoogleClockCompat", "    targetEndElapsedRealtime: $targetEndElapsedRealtime")
+            Log.i("GoogleClockCompat", "    currentTimerState: $currentTimer")
             
             return ParsedClockState.Timer(TimerState(
                 isRunning = isRunning,
@@ -267,6 +286,92 @@ object GoogleClockProvider : ClockProvider {
         }
 
         return ParsedClockState.None
+    }
+
+    private fun extractDataFromRemoteViews(notification: android.app.Notification): ExtractedRemoteViewsData {
+        val texts = mutableListOf<String>()
+        var baseTimeMs: Long? = null
+        var isCountDown: Boolean? = null
+        
+        val viewsList = listOfNotNull(notification.contentView, notification.bigContentView, notification.headsUpContentView)
+        for (views in viewsList) {
+            try {
+                val actionsField = views.javaClass.getDeclaredField("mActions")
+                actionsField.isAccessible = true
+                val actions = actionsField.get(views) as? List<*> ?: continue
+                for (action in actions) {
+                    if (action == null) continue
+                    
+                    var clazz: Class<*>? = action.javaClass
+                    var methodName: String? = null
+                    var value: Any? = null
+                    
+                    while (clazz != null && clazz != Any::class.java) {
+                        for (field in clazz.declaredFields) {
+                            try {
+                                field.isAccessible = true
+                                if (field.name == "methodName") {
+                                    methodName = field.get(action) as? String
+                                } else if (field.name == "value") {
+                                    value = field.get(action)
+                                }
+                            } catch (e: Exception) {
+                                // ignore
+                            }
+                        }
+                        clazz = clazz.superclass
+                    }
+                    
+                    if (methodName == "setText" && value is CharSequence) {
+                        val str = value.toString().trim()
+                        if (str.isNotEmpty()) {
+                            texts.add(str)
+                        }
+                    } else if (methodName == "setBase" && value is Long) {
+                        baseTimeMs = value
+                    } else if (methodName == "setCountDown" && value is Boolean) {
+                        isCountDown = value
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        return ExtractedRemoteViewsData(texts, baseTimeMs, isCountDown)
+    }
+
+    private fun logRemoteViewsDetails(views: android.widget.RemoteViews?, name: String) {
+        if (views == null) return
+        Log.i("GoogleClockCompat", "  --- RemoteViews: $name ---")
+        try {
+            val actionsField = views.javaClass.getDeclaredField("mActions")
+            actionsField.isAccessible = true
+            val actions = actionsField.get(views) as? List<*> ?: return
+            Log.i("GoogleClockCompat", "    Total actions: ${actions.size}")
+            for ((index, action) in actions.withIndex()) {
+                if (action == null) continue
+                val actionClass = action.javaClass.simpleName
+                Log.i("GoogleClockCompat", "    Action #$index: $actionClass")
+                
+                var clazz: Class<*>? = action.javaClass
+                while (clazz != null && clazz != Any::class.java) {
+                    for (field in clazz.declaredFields) {
+                        try {
+                            field.isAccessible = true
+                            val value = field.get(action)
+                            if (value != null) {
+                                Log.i("GoogleClockCompat", "      Field '${field.name}' (${field.type.simpleName}) = $value")
+                            }
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    clazz = clazz.superclass
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("GoogleClockCompat", "    Error listing actions for $name: ${e.message}")
+        }
     }
 }
 
