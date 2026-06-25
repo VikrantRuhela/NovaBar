@@ -119,27 +119,34 @@ object GoogleClockProvider : ClockProvider {
 
         val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
         val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
+        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
+        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
         
         val isStopwatch = title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
-                hasLap
+                hasLap ||
+                (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis())
                 
         val isTimer = !isStopwatch && (
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
             isCountDown ||
-            actionTitles.any { it.contains("+1") || it.contains("add") }
+            actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") } ||
+            (whenTime > System.currentTimeMillis()) ||
+            (hasPause || hasResume)
         )
 
         if (isStopwatch && settings.stopwatchEnabled) {
             val isRunning = hasPause || hasLap
-            val elapsedMs = if (showChronometer && whenTime > 0) {
+            val currentStopwatch = OverlayStateManager.stopwatchState.value
+            
+            val elapsedMs = if (showChronometer && whenTime > 0L && isRunning) {
                 System.currentTimeMillis() - whenTime
             } else {
-                NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title) ?: 0L
+                val parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                parsed ?: if (currentStopwatch != null) currentStopwatch.elapsedMs else 0L
             }
+            
             val startElapsedRealtime = if (isRunning) {
                 android.os.SystemClock.elapsedRealtime() - elapsedMs
             } else {
@@ -158,17 +165,28 @@ object GoogleClockProvider : ClockProvider {
 
         if (isTimer && settings.timerEnabled) {
             val isRunning = hasPause || actionTitles.any { it.contains("+1") }
+            val currentTimer = OverlayStateManager.timerState.value
+            
+            // Align remaining time to text representation if available
+            val textRemainingMs = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+            
             var remainingMs = if (whenTime > System.currentTimeMillis()) {
                 whenTime - System.currentTimeMillis()
             } else {
-                NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title) ?: 0L
+                textRemainingMs ?: if (currentTimer != null) currentTimer.remainingMs else 0L
+            }
+
+            // Align chronometer remaining to the text value if they are close (within 1.5 seconds)
+            if (textRemainingMs != null && whenTime > System.currentTimeMillis()) {
+                val diff = Math.abs(remainingMs - textRemainingMs)
+                if (diff < 1500L) {
+                    remainingMs = textRemainingMs
+                }
             }
             
-            // Get duration
             val durationMs = if (remainingMs > 0) {
                 remainingMs
             } else {
-                val currentTimer = OverlayStateManager.timerState.value
                 if (currentTimer != null && currentTimer.durationMs > 0L) {
                     currentTimer.durationMs
                 } else {
@@ -223,33 +241,38 @@ object XiaomiClockProvider : ClockProvider {
             false
         }
 
+        val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
+        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
+        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
+        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
+
         val isStopwatch = title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
-                actionTitles.any { it.contains("lap") || it.contains("split") }
+                hasLap ||
+                (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis())
                 
         val isTimer = !isStopwatch && (
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
             isCountDown ||
             actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") } ||
-            extras.containsKey("miui.focus.param")
+            extras.containsKey("miui.focus.param") ||
+            (hasPause || hasResume)
         )
 
         if (isStopwatch && settings.stopwatchEnabled) {
             val isRunning = (title.lowercase().contains("running") ||
                     text.lowercase().contains("running") ||
-                    actionTitles.any { it.contains("pause") || it.contains("lap") }) &&
+                    hasPause || hasLap) &&
                     !title.lowercase().contains("paused") &&
                     !text.lowercase().contains("paused")
             
-            val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-            val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-            val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
-
-            val elapsedMs = if (showChronometer && whenTime > 0) {
+            val currentStopwatch = OverlayStateManager.stopwatchState.value
+            val elapsedMs = if (showChronometer && whenTime > 0L && isRunning) {
                 System.currentTimeMillis() - whenTime
             } else {
-                NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title) ?: 0L
+                val parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                parsed ?: if (currentStopwatch != null) currentStopwatch.elapsedMs else 0L
             }
             val startElapsedRealtime = if (isRunning) {
                 android.os.SystemClock.elapsedRealtime() - elapsedMs
@@ -294,14 +317,13 @@ object XiaomiClockProvider : ClockProvider {
             }
 
             val isRunning = if (miuiIsRunning != null) {
-                miuiIsRunning || actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") }
+                miuiIsRunning || hasPause || actionTitles.any { it.contains("+1") }
             } else {
-                actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") } || (showChronometer && isCountDown)
+                hasPause || actionTitles.any { it.contains("+1") } || (showChronometer && isCountDown)
             }
 
-            val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-            val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-            val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
+            val currentTimer = OverlayStateManager.timerState.value
+            val textRemainingMs = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
 
             var remainingMs = (if (miuiTimerWhen != null && miuiTimerSystemCurrent != null) {
                 if (isRunning) {
@@ -309,20 +331,149 @@ object XiaomiClockProvider : ClockProvider {
                 } else {
                     miuiTimerWhen - miuiTimerSystemCurrent
                 }
-            } else if (showChronometer && whenTime > 0) {
+            } else if (showChronometer && whenTime > 0L) {
                 whenTime - System.currentTimeMillis()
             } else {
-                NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title) ?: 0L
+                textRemainingMs ?: if (currentTimer != null) currentTimer.remainingMs else 0L
             }).coerceAtLeast(0L)
             
+            // Align remaining time to text value if close
+            if (textRemainingMs != null) {
+                val diff = Math.abs(remainingMs - textRemainingMs)
+                if (diff < 1500L) {
+                    remainingMs = textRemainingMs
+                }
+            }
+
             val durationMs = if (miuiDurationMs != null && miuiDurationMs > 0L) {
                 miuiDurationMs
             } else {
-                val currentTimer = OverlayStateManager.timerState.value
                 if (currentTimer != null && currentTimer.durationMs > remainingMs) {
                     currentTimer.durationMs
                 } else {
                     remainingMs
+                }
+            }
+
+            // Clamp remainingMs to durationMs to prevent overshoot
+            if (durationMs > 0L) {
+                remainingMs = remainingMs.coerceAtMost(durationMs)
+            }
+
+            val targetEndElapsedRealtime = if (isRunning) {
+                android.os.SystemClock.elapsedRealtime() + remainingMs
+            } else {
+                0L
+            }
+            
+            return ParsedClockState.Timer(TimerState(
+                isRunning = isRunning,
+                durationMs = durationMs,
+                remainingMs = remainingMs,
+                label = if (title.lowercase().contains("timer")) text else title,
+                hasPause = hasPause,
+                hasResume = hasResume,
+                hasReset = hasReset,
+                targetEndElapsedRealtime = targetEndElapsedRealtime,
+                showSeconds = settings.showSeconds
+            ))
+        }
+
+        return ParsedClockState.None
+    }
+}
+
+object SamsungClockProvider : ClockProvider {
+    private const val TAG = "SamsungClockProvider"
+    
+    override fun parse(sbn: StatusBarNotification, settings: NovaSettings, context: Context): ParsedClockState {
+        val notification = sbn.notification
+        val extras = notification.extras ?: android.os.Bundle()
+        val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: ""
+        val actions = notification.actions ?: emptyArray()
+        val actionTitles = actions.map { it.title.toString().lowercase() }
+        val whenTime = notification.`when`
+        val showChronometer = extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER, false)
+        
+        val isCountDown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            extras.getBoolean("android.chronometerCountDown", false)
+        } else {
+            false
+        }
+
+        val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
+        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
+        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
+        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
+        
+        val isStopwatch = title.lowercase().contains("stopwatch") || 
+                text.lowercase().contains("stopwatch") || 
+                hasLap ||
+                (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1"))
+                
+        val isTimer = !isStopwatch && (
+            title.lowercase().contains("timer") || 
+            text.lowercase().contains("timer") || 
+            isCountDown ||
+            actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") } ||
+            // Fallback for One UI 8.5 (F16)
+            (hasPause || hasResume)
+        )
+
+        if (isStopwatch && settings.stopwatchEnabled) {
+            val isRunning = hasPause || hasLap
+            val currentStopwatch = OverlayStateManager.stopwatchState.value
+            val elapsedMs = if (showChronometer && whenTime > 0L && isRunning) {
+                System.currentTimeMillis() - whenTime
+            } else {
+                val parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                parsed ?: if (currentStopwatch != null) currentStopwatch.elapsedMs else 0L
+            }
+            val startElapsedRealtime = if (isRunning) {
+                android.os.SystemClock.elapsedRealtime() - elapsedMs
+            } else {
+                0L
+            }
+            return ParsedClockState.Stopwatch(StopwatchState(
+                isRunning = isRunning,
+                elapsedMs = elapsedMs.coerceAtLeast(0L),
+                hasPause = hasPause,
+                hasResume = hasResume,
+                hasLap = hasLap,
+                startElapsedRealtime = startElapsedRealtime,
+                showSeconds = settings.showSeconds
+            ))
+        }
+
+        if (isTimer && settings.timerEnabled) {
+            val isRunning = hasPause || actionTitles.any { it.contains("+1") }
+            val currentTimer = OverlayStateManager.timerState.value
+            
+            // Align remaining time to text representation if available
+            val textRemainingMs = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+            
+            var remainingMs = if (showChronometer && whenTime > 0L) {
+                (whenTime - System.currentTimeMillis()).coerceAtLeast(0L)
+            } else {
+                textRemainingMs ?: if (currentTimer != null) currentTimer.remainingMs else 0L
+            }
+
+            // Align chronometer remaining to the text value if they are close (within 1.5 seconds)
+            if (textRemainingMs != null && showChronometer && whenTime > 0L) {
+                val diff = Math.abs(remainingMs - textRemainingMs)
+                if (diff < 1500L) {
+                    remainingMs = textRemainingMs
+                }
+            }
+            
+            val durationMs = if (remainingMs > 0) {
+                remainingMs
+            } else {
+                if (currentTimer != null && currentTimer.durationMs > 0L) {
+                    currentTimer.durationMs
+                } else {
+                    0L
                 }
             }
 
@@ -373,26 +524,32 @@ object DefaultClockProvider : ClockProvider {
             false
         }
 
+        val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
+        val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
+        val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
+        val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
+        
         val isStopwatch = title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
-                actionTitles.any { it.contains("lap") || it.contains("split") } ||
+                hasLap ||
                 (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1"))
                 
-        val isTimer = title.lowercase().contains("timer") || 
-                text.lowercase().contains("timer") || 
-                isCountDown ||
-                actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") }
+        val isTimer = !isStopwatch && (
+            title.lowercase().contains("timer") || 
+            text.lowercase().contains("timer") || 
+            isCountDown ||
+            actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") } ||
+            (hasPause || hasResume)
+        )
 
         if (isStopwatch && settings.stopwatchEnabled) {
-            val isRunning = actionTitles.any { it.contains("pause") || it.contains("lap") }
-            val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-            val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-            val hasLap = actionTitles.any { it.contains("lap") || it.contains("split") }
-
-            val elapsedMs = if (showChronometer && whenTime > 0) {
+            val isRunning = hasPause || hasLap
+            val currentStopwatch = OverlayStateManager.stopwatchState.value
+            val elapsedMs = if (showChronometer && whenTime > 0L && isRunning) {
                 System.currentTimeMillis() - whenTime
             } else {
-                NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title) ?: 0L
+                val parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+                parsed ?: if (currentStopwatch != null) currentStopwatch.elapsedMs else 0L
             }
             val startElapsedRealtime = if (isRunning) {
                 android.os.SystemClock.elapsedRealtime() - elapsedMs
@@ -411,21 +568,29 @@ object DefaultClockProvider : ClockProvider {
         }
 
         if (isTimer && settings.timerEnabled) {
-            val isRunning = actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") } || (showChronometer && isCountDown)
-            val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
-            val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
-            val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
-
-            var remainingMs = (if (showChronometer && whenTime > 0) {
-                whenTime - System.currentTimeMillis()
+            val isRunning = hasPause || actionTitles.any { it.contains("+1") }
+            val currentTimer = OverlayStateManager.timerState.value
+            
+            // Align remaining time to text representation if available
+            val textRemainingMs = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
+            
+            var remainingMs = if (showChronometer && whenTime > 0L) {
+                (whenTime - System.currentTimeMillis()).coerceAtLeast(0L)
             } else {
-                NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title) ?: 0L
-            }).coerceAtLeast(0L)
+                textRemainingMs ?: if (currentTimer != null) currentTimer.remainingMs else 0L
+            }
+
+            // Align chronometer remaining to the text value if they are close (within 1.5 seconds)
+            if (textRemainingMs != null && showChronometer && whenTime > 0L) {
+                val diff = Math.abs(remainingMs - textRemainingMs)
+                if (diff < 1500L) {
+                    remainingMs = textRemainingMs
+                }
+            }
             
             val durationMs = if (remainingMs > 0) {
                 remainingMs
             } else {
-                val currentTimer = OverlayStateManager.timerState.value
                 if (currentTimer != null && currentTimer.durationMs > 0L) {
                     currentTimer.durationMs
                 } else {
@@ -466,7 +631,7 @@ object ClockCompatibilityLayer {
 
     private val providers = mapOf(
         "com.google.android.deskclock" to LoggingClockProvider("GoogleClock", GoogleClockProvider),
-        "com.sec.android.app.clockpackage" to LoggingClockProvider("SamsungClock", DefaultClockProvider),
+        "com.sec.android.app.clockpackage" to LoggingClockProvider("SamsungClock", SamsungClockProvider),
         "com.android.deskclock" to LoggingClockProvider("XiaomiClock", XiaomiClockProvider),
         "com.oneplus.deskclock" to LoggingClockProvider("OnePlusClock", DefaultClockProvider),
         "com.coloros.alarmclock" to LoggingClockProvider("OppoRealmeClock", DefaultClockProvider),
