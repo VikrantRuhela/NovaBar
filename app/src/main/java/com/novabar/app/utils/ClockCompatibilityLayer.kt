@@ -136,12 +136,38 @@ object GoogleClockProvider : ClockProvider {
             (hasPause || hasResume)
         )
 
+        // Log general Google Clock notification information
+        Log.d("GoogleClockCompat", "=== Google Clock Notification ===")
+        Log.d("GoogleClockCompat", "  Package: ${sbn.packageName}")
+        Log.d("GoogleClockCompat", "  ID: ${sbn.id}")
+        Log.d("GoogleClockCompat", "  Category: ${notification.category}")
+        Log.d("GoogleClockCompat", "  Title: '$title'")
+        Log.d("GoogleClockCompat", "  Text: '$text'")
+        Log.d("GoogleClockCompat", "  When: $whenTime")
+        Log.d("GoogleClockCompat", "  PostTime: ${sbn.postTime}")
+        Log.d("GoogleClockCompat", "  ShowChronometer: $showChronometer")
+        Log.d("GoogleClockCompat", "  IsCountDown: $isCountDown")
+        Log.d("GoogleClockCompat", "  Action Titles: $actionTitles")
+        Log.d("GoogleClockCompat", "  Classification: isStopwatch=$isStopwatch, isTimer=$isTimer")
+        
+        // Log all notification extras in detail
+        try {
+            val keys = extras.keySet()
+            Log.d("GoogleClockCompat", "  Extras bundle content (${keys.size} keys):")
+            for (key in keys) {
+                Log.d("GoogleClockCompat", "    $key = ${extras.get(key)}")
+            }
+        } catch (e: Exception) {
+            Log.e("GoogleClockCompat", "  Failed to print extras keys: ${e.message}")
+        }
+
         if (isStopwatch && settings.stopwatchEnabled) {
             val isRunning = hasPause || hasLap
             val currentStopwatch = OverlayStateManager.stopwatchState.value
             
+            val currentTime = System.currentTimeMillis()
             val elapsedMs = if (showChronometer && whenTime > 0L && isRunning) {
-                System.currentTimeMillis() - whenTime
+                currentTime - whenTime
             } else {
                 val parsed = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
                 parsed ?: if (currentStopwatch != null) currentStopwatch.elapsedMs else 0L
@@ -152,6 +178,14 @@ object GoogleClockProvider : ClockProvider {
             } else {
                 0L
             }
+            
+            Log.d("GoogleClockCompat", "  Stopwatch Parsing Details:")
+            Log.d("GoogleClockCompat", "    isRunning: $isRunning")
+            Log.d("GoogleClockCompat", "    currentTime: $currentTime")
+            Log.d("GoogleClockCompat", "    elapsedMs: $elapsedMs")
+            Log.d("GoogleClockCompat", "    startElapsedRealtime: $startElapsedRealtime")
+            Log.d("GoogleClockCompat", "    currentStopwatchState: $currentStopwatch")
+            
             return ParsedClockState.Stopwatch(StopwatchState(
                 isRunning = isRunning,
                 elapsedMs = elapsedMs.coerceAtLeast(0L),
@@ -170,17 +204,26 @@ object GoogleClockProvider : ClockProvider {
             // Align remaining time to text representation if available
             val textRemainingMs = NovaNotificationListener.parseTimeToMs(text) ?: NovaNotificationListener.parseTimeToMs(title)
             
-            var remainingMs = if (whenTime > System.currentTimeMillis()) {
-                whenTime - System.currentTimeMillis()
+            val currentTime = System.currentTimeMillis()
+            var remainingMs = if (whenTime > currentTime) {
+                whenTime - currentTime
             } else {
                 textRemainingMs ?: if (currentTimer != null) currentTimer.remainingMs else 0L
             }
 
+            Log.d("GoogleClockCompat", "  Timer Parsing Details:")
+            Log.d("GoogleClockCompat", "    isRunning: $isRunning")
+            Log.d("GoogleClockCompat", "    currentTime: $currentTime")
+            Log.d("GoogleClockCompat", "    textRemainingMs: $textRemainingMs")
+            Log.d("GoogleClockCompat", "    raw remainingMs (from when or text): $remainingMs")
+
             // Align chronometer remaining to the text value if they are close (within 1.5 seconds)
-            if (textRemainingMs != null && whenTime > System.currentTimeMillis()) {
+            if (textRemainingMs != null && whenTime > currentTime) {
                 val diff = Math.abs(remainingMs - textRemainingMs)
+                Log.d("GoogleClockCompat", "    align check: diff=$diff ms")
                 if (diff < 1500L) {
                     remainingMs = textRemainingMs
+                    Log.d("GoogleClockCompat", "    aligned remainingMs to text value: $remainingMs")
                 }
             }
             
@@ -204,6 +247,11 @@ object GoogleClockProvider : ClockProvider {
             } else {
                 0L
             }
+            
+            Log.d("GoogleClockCompat", "    final durationMs: $durationMs")
+            Log.d("GoogleClockCompat", "    final remainingMs: $remainingMs")
+            Log.d("GoogleClockCompat", "    targetEndElapsedRealtime: $targetEndElapsedRealtime")
+            Log.d("GoogleClockCompat", "    currentTimerState: $currentTimer")
             
             return ParsedClockState.Timer(TimerState(
                 isRunning = isRunning,
