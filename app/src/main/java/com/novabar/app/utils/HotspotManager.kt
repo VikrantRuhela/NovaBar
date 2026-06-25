@@ -53,7 +53,7 @@ object HotspotManager {
                 OverlayStateManager.hotspotState.value = finalState
                 
                 DeveloperLogger.log(appContext, "HOTSPOT", "Final activity registration decision: registered=${finalState != null} (state: $finalState)")
-                Log.d(TAG, "Hotspot state updated: active=$active (wifi_state=$state)")
+                Log.i(TAG, "Hotspot state updated: active=$active (wifi_state=$state)")
             }
         }
     }
@@ -64,9 +64,13 @@ object HotspotManager {
         
         val filter = IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED")
         try {
-            appContext.registerReceiver(receiver, filter)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                appContext.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                appContext.registerReceiver(receiver, filter)
+            }
             isRegistered = true
-            Log.d(TAG, "Successfully registered WIFI_AP_STATE_CHANGED broadcast receiver")
+            Log.i(TAG, "Successfully registered WIFI_AP_STATE_CHANGED broadcast receiver")
             DeveloperLogger.log(appContext, "HOTSPOT", "Receiver registration succeeded: action=android.net.wifi.WIFI_AP_STATE_CHANGED")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register WIFI_AP_STATE_CHANGED broadcast receiver: ${e.message}", e)

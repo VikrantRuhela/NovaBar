@@ -872,17 +872,55 @@ class NovaNotificationListener : NotificationListenerService() {
                         return@launch
                     } else if (isTimer && settings.timerEnabled) {
                         activeTimerSbn = sbn
-                        val isRunning = actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") } || (showChronometer && isCountDown)
+                        
+                        var miuiTimerWhen: Long? = null
+                        var miuiTimerSystemCurrent: Long? = null
+                        var miuiIsRunning: Boolean? = null
+                        var miuiDurationMs: Long? = null
+                        
+                        val miuiFocusParam = extras.getString("miui.focus.param")
+                        if (!miuiFocusParam.isNullOrEmpty()) {
+                            try {
+                                val json = org.json.JSONObject(miuiFocusParam)
+                                val timerWhen = json.optLong("timerWhen", 0L)
+                                val timerSystemCurrent = json.optLong("timerSystemCurrent", 0L)
+                                val timerTotal = json.optLong("timerTotal", 0L)
+                                val timerType = json.optInt("timerType", 0)
+                                
+                                if (timerWhen > 0 && timerSystemCurrent > 0) {
+                                    miuiTimerWhen = timerWhen
+                                    miuiTimerSystemCurrent = timerSystemCurrent
+                                    miuiIsRunning = timerType == -1
+                                    miuiDurationMs = timerTotal
+                                    Log.i("NovaBar-Timer", "Parsed MIUI focus param: timerWhen=$timerWhen, timerSystemCurrent=$timerSystemCurrent, isRunning=$miuiIsRunning, durationMs=$miuiDurationMs")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("NovaBar-Timer", "Failed to parse miui.focus.param: ${e.message}")
+                            }
+                        }
+
+                        val isRunning = if (miuiIsRunning != null) {
+                            miuiIsRunning || actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") }
+                        } else {
+                            actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") } || (showChronometer && isCountDown)
+                        }
 
                         val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
                         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
                         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") }
 
-                        val remainingMs = if (showChronometer && whenTime > 0) {
+                        val remainingMs = (if (miuiTimerWhen != null && miuiTimerSystemCurrent != null) {
+                            if (isRunning) {
+                                miuiTimerWhen - System.currentTimeMillis()
+                            } else {
+                                miuiTimerWhen - miuiTimerSystemCurrent
+                            }
+                        } else if (showChronometer && whenTime > 0) {
                             whenTime - System.currentTimeMillis()
                         } else {
                             parseTimeToMs(text) ?: parseTimeToMs(title) ?: 0L
-                        }
+                        }).coerceAtLeast(0L)
+                        
                         val targetEndElapsedRealtime = if (isRunning) {
                             android.os.SystemClock.elapsedRealtime() + remainingMs
                         } else {
@@ -890,7 +928,9 @@ class NovaNotificationListener : NotificationListenerService() {
                         }
                         
                         val currentTimer = OverlayStateManager.timerState.value
-                        val durationMs = if (remainingMs > 0) {
+                        val durationMs = if (miuiDurationMs != null) {
+                            miuiDurationMs
+                        } else if (remainingMs > 0) {
                             if (currentTimer != null && currentTimer.durationMs > remainingMs) currentTimer.durationMs else remainingMs
                         } else {
                             0L
