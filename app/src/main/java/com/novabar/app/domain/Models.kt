@@ -40,11 +40,33 @@ data class StopwatchState(
 )
 
 
+enum class ManeuverType {
+    STRAIGHT,
+    LEFT,
+    RIGHT,
+    SLIGHT_LEFT,
+    SLIGHT_RIGHT,
+    SHARP_LEFT,
+    SHARP_RIGHT,
+    KEEP_LEFT,
+    KEEP_RIGHT,
+    MERGE,
+    EXIT,
+    UTURN,
+    ROUNDABOUT_ENTER,
+    ROUNDABOUT_EXIT,
+    DESTINATION,
+    ARRIVAL,
+    UNKNOWN
+}
+
 data class NavigationState(
     val maneuverInstruction: String = "",
     val distanceRemaining: String = "",
     val eta: String = "",
-    val maneuverIcon: Drawable? = null
+    val maneuverIcon: Drawable? = null,
+    val maneuverType: ManeuverType = ManeuverType.UNKNOWN,
+    val appName: String = ""
 )
 
 data class ChargingState(

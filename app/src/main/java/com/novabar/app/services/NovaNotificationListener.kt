@@ -743,13 +743,25 @@ class NovaNotificationListener : NotificationListenerService() {
                         null
                     }
 
-                    Log.i("NovaBar-Navigation", "Classification SUCCESS: Registering navigation activity")
+                    val maneuverType = com.novabar.app.utils.NavigationCompatibilityLayer.parse(sbn, this@NovaNotificationListener)
+
+                    val appLabel = try {
+                        val pm = packageManager
+                        val info = pm.getApplicationInfo(packageName, 0)
+                        pm.getApplicationLabel(info).toString()
+                    } catch (e: Exception) {
+                        "Navigation"
+                    }
+
+                    Log.i("NovaBar-Navigation", "Classification SUCCESS: Registering navigation activity with maneuver: $maneuverType from app: $appLabel")
 
                     OverlayStateManager.navigationState.value = NavigationState(
                         maneuverInstruction = title,
                         distanceRemaining = text,
                         eta = eta,
-                        maneuverIcon = drawable
+                        maneuverIcon = drawable,
+                        maneuverType = maneuverType,
+                        appName = appLabel
                     )
                     return@launch
                 } else if (isNav || isMapsPkg) {

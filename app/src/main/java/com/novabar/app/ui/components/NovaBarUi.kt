@@ -2062,7 +2062,11 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                Text("↱", color = Color(0xFF2196F3), fontSize = (if (currentState == NowBarState.MINIMIZED) 12f else 14f + sizeOffset).sp, fontWeight = FontWeight.Bold)
+                ManeuverIcon(
+                    type = state.maneuverType,
+                    color = Color(0xFF2196F3),
+                    modifier = Modifier.size(if (currentState == NowBarState.MINIMIZED) 14.dp else 16.dp)
+                )
             }
         } else {
             Row(
@@ -2092,7 +2096,11 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
             ) {
-                Text("↱", color = Color(0xFF2196F3), fontSize = (12f + sizeOffset).sp, fontWeight = FontWeight.Bold)
+                ManeuverIcon(
+                    type = state.maneuverType,
+                    color = Color(0xFF2196F3),
+                    modifier = Modifier.size(14.dp)
+                )
                 Text(
                     text = state.distanceRemaining.ifEmpty { "Nav" },
                     color = color,
@@ -2111,7 +2119,11 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("↱", color = Color(0xFF2196F3), fontSize = (14f + sizeOffset).sp, fontWeight = FontWeight.Bold)
+                ManeuverIcon(
+                    type = state.maneuverType,
+                    color = Color(0xFF2196F3),
+                    modifier = Modifier.size(18.dp)
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = state.maneuverInstruction.ifEmpty { "Navigating..." },
@@ -2145,7 +2157,11 @@ fun NavigationView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("↱", color = Color(0xFF2196F3), fontSize = (22f + sizeOffset).sp, fontWeight = FontWeight.Bold)
+                    ManeuverIcon(
+                        type = state.maneuverType,
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.size(28.dp)
+                    )
                     Column {
                         Text(
                             text = state.maneuverInstruction.ifEmpty { "Navigation" },
@@ -2154,7 +2170,7 @@ fun NavigationView(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Google Maps",
+                            text = state.appName.ifEmpty { "Google Maps" },
                             color = color.copy(alpha = 0.5f),
                             fontSize = (10f + sizeOffset).sp
                         )
@@ -3481,6 +3497,402 @@ fun HotspotView(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ManeuverIcon(type: com.novabar.app.domain.ManeuverType, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        val strokeWidth = w * 0.12f
+        
+        when (type) {
+            com.novabar.app.domain.ManeuverType.STRAIGHT -> {
+                drawLine(
+                    color = color,
+                    start = Offset(cx, h * 0.85f),
+                    end = Offset(cx, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.22f, h * 0.37f),
+                    end = Offset(cx, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.22f, h * 0.37f),
+                    end = Offset(cx, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.LEFT -> {
+                val path = Path().apply {
+                    moveTo(cx, h * 0.85f)
+                    lineTo(cx, h * 0.5f)
+                    quadraticBezierTo(cx, h * 0.35f, cx - w * 0.15f, h * 0.35f)
+                    lineTo(w * 0.15f, h * 0.35f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.35f, h * 0.15f),
+                    end = Offset(w * 0.15f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.35f, h * 0.55f),
+                    end = Offset(w * 0.15f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.RIGHT -> {
+                val path = Path().apply {
+                    moveTo(cx, h * 0.85f)
+                    lineTo(cx, h * 0.5f)
+                    quadraticBezierTo(cx, h * 0.35f, cx + w * 0.15f, h * 0.35f)
+                    lineTo(w * 0.85f, h * 0.35f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.65f, h * 0.15f),
+                    end = Offset(w * 0.85f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.65f, h * 0.55f),
+                    end = Offset(w * 0.85f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.SLIGHT_LEFT -> {
+                val path = Path().apply {
+                    moveTo(cx + w * 0.15f, h * 0.85f)
+                    lineTo(cx - w * 0.15f, h * 0.35f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.35f, h * 0.55f),
+                    end = Offset(cx - w * 0.15f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.05f, h * 0.15f),
+                    end = Offset(cx - w * 0.15f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.SLIGHT_RIGHT -> {
+                val path = Path().apply {
+                    moveTo(cx - w * 0.15f, h * 0.85f)
+                    lineTo(cx + w * 0.15f, h * 0.35f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.35f, h * 0.55f),
+                    end = Offset(cx + w * 0.15f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.05f, h * 0.15f),
+                    end = Offset(cx + w * 0.15f, h * 0.35f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.SHARP_LEFT -> {
+                val path = Path().apply {
+                    moveTo(cx + w * 0.2f, h * 0.85f)
+                    lineTo(cx + w * 0.2f, h * 0.25f)
+                    lineTo(w * 0.15f, h * 0.25f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Miter))
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.35f, h * 0.05f),
+                    end = Offset(w * 0.15f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.35f, h * 0.45f),
+                    end = Offset(w * 0.15f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.SHARP_RIGHT -> {
+                val path = Path().apply {
+                    moveTo(cx - w * 0.2f, h * 0.85f)
+                    lineTo(cx - w * 0.2f, h * 0.25f)
+                    lineTo(w * 0.85f, h * 0.25f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Miter))
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.65f, h * 0.05f),
+                    end = Offset(w * 0.85f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.65f, h * 0.45f),
+                    end = Offset(w * 0.85f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.KEEP_LEFT -> {
+                val pathRight = Path().apply {
+                    moveTo(cx, h * 0.85f)
+                    quadraticBezierTo(cx, h * 0.55f, cx + w * 0.25f, h * 0.25f)
+                }
+                drawPath(pathRight, color.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                val pathLeft = Path().apply {
+                    moveTo(cx, h * 0.85f)
+                    quadraticBezierTo(cx, h * 0.55f, cx - w * 0.25f, h * 0.25f)
+                }
+                drawPath(pathLeft, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.35f, h * 0.45f),
+                    end = Offset(cx - w * 0.25f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.1f, h * 0.2f),
+                    end = Offset(cx - w * 0.25f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.KEEP_RIGHT -> {
+                val pathLeft = Path().apply {
+                    moveTo(cx, h * 0.85f)
+                    quadraticBezierTo(cx, h * 0.55f, cx - w * 0.25f, h * 0.25f)
+                }
+                drawPath(pathLeft, color.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                val pathRight = Path().apply {
+                    moveTo(cx, h * 0.85f)
+                    quadraticBezierTo(cx, h * 0.55f, cx + w * 0.25f, h * 0.25f)
+                }
+                drawPath(pathRight, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.35f, h * 0.45f),
+                    end = Offset(cx + w * 0.25f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.1f, h * 0.2f),
+                    end = Offset(cx + w * 0.25f, h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.MERGE -> {
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.1f, h * 0.85f),
+                    end = Offset(cx - w * 0.1f, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                val pathMerge = Path().apply {
+                    moveTo(cx + w * 0.25f, h * 0.75f)
+                    quadraticBezierTo(cx + w * 0.15f, h * 0.5f, cx - w * 0.1f, h * 0.45f)
+                }
+                drawPath(pathMerge, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.3f, h * 0.35f),
+                    end = Offset(cx - w * 0.1f, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.1f, h * 0.35f),
+                    end = Offset(cx - w * 0.1f, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.EXIT -> {
+                drawLine(
+                    color = color.copy(alpha = 0.3f),
+                    start = Offset(cx - w * 0.15f, h * 0.85f),
+                    end = Offset(cx - w * 0.15f, h * 0.15f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                val pathExit = Path().apply {
+                    moveTo(cx - w * 0.15f, h * 0.65f)
+                    quadraticBezierTo(cx - w * 0.05f, h * 0.5f, cx + w * 0.25f, h * 0.3f)
+                }
+                drawPath(pathExit, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.3f, h * 0.5f),
+                    end = Offset(cx + w * 0.25f, h * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.1f, h * 0.2f),
+                    end = Offset(cx + w * 0.25f, h * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.UTURN -> {
+                val path = Path().apply {
+                    moveTo(cx + w * 0.15f, h * 0.85f)
+                    lineTo(cx + w * 0.15f, h * 0.35f)
+                    quadraticBezierTo(cx + w * 0.15f, h * 0.15f, cx, h * 0.15f)
+                    quadraticBezierTo(cx - w * 0.15f, h * 0.15f, cx - w * 0.15f, h * 0.35f)
+                    lineTo(cx - w * 0.15f, h * 0.75f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.3f, h * 0.55f),
+                    end = Offset(cx - w * 0.15f, h * 0.75f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx, h * 0.55f),
+                    end = Offset(cx - w * 0.15f, h * 0.75f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.ROUNDABOUT_ENTER -> {
+                drawCircle(
+                    color = color,
+                    radius = w * 0.3f,
+                    center = Offset(cx, cy),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.1f, cy - w * 0.42f),
+                    end = Offset(cx + w * 0.12f, cy - w * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx - w * 0.05f, cy - w * 0.12f),
+                    end = Offset(cx + w * 0.12f, cy - w * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx, h * 0.9f),
+                    end = Offset(cx, cy + w * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.ROUNDABOUT_EXIT -> {
+                drawCircle(
+                    color = color.copy(alpha = 0.3f),
+                    radius = w * 0.28f,
+                    center = Offset(cx - w * 0.05f, cy + h * 0.05f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                )
+                val path = Path().apply {
+                    moveTo(cx - w * 0.05f, h * 0.85f)
+                    lineTo(cx - w * 0.05f, cy + h * 0.05f)
+                    quadraticBezierTo(cx - w * 0.05f, cy - h * 0.2f, cx + w * 0.25f, cy - h * 0.25f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(cx + w * 0.1f, cy - h * 0.42f),
+                    end = Offset(cx + w * 0.25f, cy - h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(cx + 0.12f * w, cy - h * 0.05f),
+                    end = Offset(cx + w * 0.25f, cy - h * 0.25f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+            com.novabar.app.domain.ManeuverType.DESTINATION,
+            com.novabar.app.domain.ManeuverType.ARRIVAL -> {
+                val path = Path().apply {
+                    moveTo(cx, cy + h * 0.35f)
+                    cubicTo(cx - w * 0.25f, cy, cx - w * 0.25f, cy - h * 0.25f, cx, cy - h * 0.35f)
+                    cubicTo(cx + w * 0.25f, cy - h * 0.25f, cx + w * 0.25f, cy, cx, cy + h * 0.35f)
+                    close()
+                }
+                drawPath(path, color)
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.6f),
+                    radius = w * 0.1f,
+                    center = Offset(cx, cy - h * 0.08f)
+                )
+            }
+            com.novabar.app.domain.ManeuverType.UNKNOWN -> {
+                val path = Path().apply {
+                    moveTo(cx - w * 0.15f, h * 0.85f)
+                    lineTo(cx - w * 0.15f, h * 0.45f)
+                    quadraticBezierTo(cx - w * 0.15f, h * 0.3f, cx, h * 0.3f)
+                    lineTo(w * 0.8f, h * 0.3f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.6f, h * 0.1f),
+                    end = Offset(w * 0.8f, h * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(w * 0.6f, h * 0.5f),
+                    end = Offset(w * 0.8f, h * 0.3f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
             }
         }
     }
