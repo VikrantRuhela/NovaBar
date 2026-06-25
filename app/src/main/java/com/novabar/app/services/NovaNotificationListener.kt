@@ -716,10 +716,19 @@ class NovaNotificationListener : NotificationListenerService() {
                 val isNav = sbn.notification.category == Notification.CATEGORY_NAVIGATION ||
                         packageName.contains("maps") || packageName.contains("waze")
 
-                if (isMapsPkg) {
+                if (isNav || isMapsPkg) {
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
                     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-                    Log.d("NovaBarMapsDebug", "POSTED: pkg=$packageName, title='$title', text='$text', isNav=$isNav, navigationEnabled=${settings.navigationEnabled}")
+                    val category = sbn.notification.category ?: "null"
+                    val extrasStr = com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)
+                    Log.i("NovaBar-Navigation", "Navigation Notification Received:\n" +
+                            "Package: $packageName\n" +
+                            "Category: $category\n" +
+                            "Title: '$title'\n" +
+                            "Text: '$text'\n" +
+                            "Extras: $extrasStr\n" +
+                            "isNav classification: $isNav\n" +
+                            "navigationEnabled: ${settings.navigationEnabled}")
                 }
 
                 if (isNav && settings.navigationEnabled) {
@@ -734,9 +743,7 @@ class NovaNotificationListener : NotificationListenerService() {
                         null
                     }
 
-                    if (isMapsPkg) {
-                        Log.d("NovaBarMapsDebug", "SUCCESS: Classified as ActivityType.NAVIGATION")
-                    }
+                    Log.i("NovaBar-Navigation", "Classification SUCCESS: Registering navigation activity")
 
                     OverlayStateManager.navigationState.value = NavigationState(
                         maneuverInstruction = title,
@@ -745,18 +752,26 @@ class NovaNotificationListener : NotificationListenerService() {
                         maneuverIcon = drawable
                     )
                     return@launch
-                } else if (isMapsPkg) {
+                } else if (isNav || isMapsPkg) {
                     val reason = if (!settings.navigationEnabled) "Navigation disabled in settings" else "Not classified as navigation category/package"
-                    Log.d("NovaBarMapsDebug", "REJECTED: $reason")
+                    Log.i("NovaBar-Navigation", "Classification REJECTED: $reason")
                 }
 
                 // 2. Check if Clock app (Timer or Stopwatch)
                 val isClock = packageName.contains("clock") || packageName.contains("deskclock") || packageName.contains("alarm")
-                if (isClock) {
+                val showChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
+                val actions = notification.actions ?: emptyArray()
+                val actionTitles = actions.map { it.title.toString().lowercase() }
+                val hasClockActions = actionTitles.any { 
+                    it.contains("lap") || it.contains("split") || it.contains("+1") || 
+                    it.contains("pause") || it.contains("resume") || it.contains("stop") ||
+                    it.contains("start") || it.contains("reset")
+                }
+                
+                val isClockLike = isClock || showChronometer || hasClockActions
+                if (isClockLike) {
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
                     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-                    val actions = notification.actions ?: emptyArray()
-                    val actionTitles = actions.map { it.title.toString().lowercase() }
                     
                     val isCountDown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                         extras.getBoolean("android.chronometerCountDown", false)
@@ -775,17 +790,20 @@ class NovaNotificationListener : NotificationListenerService() {
                             actionTitles.any { it.contains("+1") || it.contains("add") || it.contains("cancel") }
                     
                     val whenTime = notification.`when`
-                    val showChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
                     
-                    Log.i("NovaBar-Stopwatch", "Clock notification posted: package='$packageName', title='$title', text='$text', isCountDown=$isCountDown, actions=$actionTitles")
-                    Log.i("NovaBar-Stopwatch", "Chronometer fields: when=$whenTime, showChronometer=$showChronometer")
-                    Log.i("NovaBar-Stopwatch", "Extras: ${com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)}")
-                    Log.i("NovaBar-Stopwatch", "Validation: isStopwatch=$isStopwatch, stopwatchEnabled=${settings.stopwatchEnabled}")
-
-                    Log.i("NovaBar-Timer", "Clock notification posted: package='$packageName', title='$title', text='$text', isCountDown=$isCountDown, actions=$actionTitles")
-                    Log.i("NovaBar-Timer", "Chronometer fields: when=$whenTime, showChronometer=$showChronometer")
-                    Log.i("NovaBar-Timer", "Extras: ${com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)}")
-                    Log.i("NovaBar-Timer", "Validation: isTimer=$isTimer, timerEnabled=${settings.timerEnabled}")
+                    Log.i("NovaBar-Clock", "Clock/Chronometer notification posted:\n" +
+                            "Package: $packageName\n" +
+                            "Title: '$title'\n" +
+                            "Text: '$text'\n" +
+                            "isCountDown: $isCountDown\n" +
+                            "showChronometer: $showChronometer\n" +
+                            "whenTime: $whenTime\n" +
+                            "Actions: $actionTitles\n" +
+                            "isStopwatch: $isStopwatch\n" +
+                            "isTimer: $isTimer\n" +
+                            "stopwatchEnabled: ${settings.stopwatchEnabled}\n" +
+                            "timerEnabled: ${settings.timerEnabled}\n" +
+                            "Extras: ${com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)}")
 
                     val chronometerFields = "when=$whenTime, showChronometer=$showChronometer, chronometerCountDown=$isCountDown"
                     val extrasStr = com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)
@@ -1043,6 +1061,7 @@ class NovaNotificationListener : NotificationListenerService() {
                 val isNav = sbn.notification.category == Notification.CATEGORY_NAVIGATION ||
                         packageName.contains("maps") || packageName.contains("waze")
                 if (isNav) {
+                    Log.i("NovaBar-Navigation", "Activity removal: removing active navigation state because notification was removed (package: $packageName)")
                     OverlayStateManager.navigationState.value = null
                 }
 
