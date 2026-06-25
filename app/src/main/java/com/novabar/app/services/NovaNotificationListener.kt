@@ -872,7 +872,7 @@ class NovaNotificationListener : NotificationListenerService() {
                         return@launch
                     } else if (isTimer && settings.timerEnabled) {
                         activeTimerSbn = sbn
-                        val isRunning = actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") }
+                        val isRunning = actionTitles.any { it.contains("pause") || it.contains("+1") || it.contains("add") } || (showChronometer && isCountDown)
 
                         val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
                         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }
