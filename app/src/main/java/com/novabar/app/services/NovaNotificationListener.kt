@@ -861,7 +861,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     
                     if (isStopwatch && settings.stopwatchEnabled) {
                         activeStopwatchSbn = sbn
-                        val isRunning = actionTitles.any { it.contains("pause") || it.contains("lap") }
+                        val isRunning = (title.lowercase().contains("running") ||
+                                text.lowercase().contains("running") ||
+                                actionTitles.any { it.contains("pause") || it.contains("lap") }) &&
+                                !title.lowercase().contains("paused") &&
+                                !text.lowercase().contains("paused")
                         
                         val hasPause = actionTitles.any { it.contains("pause") || it.contains("stop") }
                         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") }

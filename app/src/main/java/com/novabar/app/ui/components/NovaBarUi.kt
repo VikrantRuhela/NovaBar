@@ -1774,10 +1774,11 @@ fun TimerView(
 }
 
 fun formatDuration(ms: Long, showSeconds: Boolean): String {
-    val hours = ms / 3600000
-    val minutes = (ms % 3600000) / 60000
-    val seconds = (ms % 60000) / 1000
-    val centiseconds = (ms % 1000) / 10
+    val displayMs = if (!showSeconds) ms + 999L else ms
+    val hours = displayMs / 3600000
+    val minutes = (displayMs % 3600000) / 60000
+    val seconds = (displayMs % 60000) / 1000
+    val centiseconds = (displayMs % 1000) / 10
     
     return if (showSeconds) {
         if (hours > 0) {
