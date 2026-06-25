@@ -48,6 +48,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.novabar.app.utils.DeveloperLogger
 
 class SettingsActivity : ComponentActivity() {
 
@@ -1242,6 +1243,79 @@ fun DiagnosticsDashboard(
                     DiagnosticsRow("View Attached", overlayAttached.toString())
                     DiagnosticsRow("Overlay Bounds", currentOverlayBounds)
                     DiagnosticsRow("Priority Activity", currentPriorityActivity)
+                }
+
+                val isLoggingEnabledState by DeveloperLogger.isLoggingEnabled.collectAsState()
+                
+                DiagnosticsSection(title = "Developer Diagnostic Logs") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Record Debug Logs", fontSize = 11.sp)
+                        Switch(
+                            checked = isLoggingEnabledState,
+                            onCheckedChange = { checked ->
+                                DeveloperLogger.setLoggingEnabled(context, checked)
+                            }
+                        )
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val logContent = DeveloperLogger.readLog(context)
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Nova Bar Debug Log", logContent))
+                                Toast.makeText(context, "Debug logs copied to clipboard!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("Copy Log", fontSize = 10.sp, maxLines = 1)
+                        }
+
+                        Button(
+                            onClick = {
+                                try {
+                                    val logFile = DeveloperLogger.getLogFile(context)
+                                    if (!logFile.exists() || logFile.length() == 0L) {
+                                        Toast.makeText(context, "Log file is empty or doesn't exist yet", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val authority = "${context.packageName}.fileprovider"
+                                        val uri = androidx.core.content.FileProvider.getUriForFile(context, authority, logFile)
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Export Debug Log"))
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Failed to share log: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("Export Log", fontSize = 10.sp, maxLines = 1)
+                        }
+
+                        Button(
+                            onClick = {
+                                DeveloperLogger.clearLog(context)
+                                Toast.makeText(context, "Debug logs cleared!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("Clear Log", fontSize = 10.sp, maxLines = 1)
+                        }
+                    }
                 }
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))

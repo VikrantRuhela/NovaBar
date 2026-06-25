@@ -777,6 +777,60 @@ class NovaNotificationListener : NotificationListenerService() {
                     val whenTime = notification.`when`
                     val showChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
                     
+                    val chronometerFields = "when=$whenTime, showChronometer=$showChronometer, chronometerCountDown=$isCountDown"
+                    val extrasStr = com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)
+
+                    if (isStopwatch) {
+                        val accepted = settings.stopwatchEnabled
+                        val reason = if (accepted) {
+                            "Matched stopwatch pattern (title/text contains 'stopwatch' or action has 'lap'/'split' or 'pause'+'reset') and settings.stopwatchEnabled is true."
+                        } else {
+                            "Matched stopwatch pattern, but rejected because settings.stopwatchEnabled is false."
+                        }
+                        com.novabar.app.utils.DeveloperLogger.log(
+                            applicationContext,
+                            "STOPWATCH_DETECTION",
+                            "Package: $packageName\n" +
+                            "Title: $title\n" +
+                            "Extras: $extrasStr\n" +
+                            "Chronometer Fields: $chronometerFields\n" +
+                            "Detection Result: ${if (accepted) "ACCEPTED" else "REJECTED"}\n" +
+                            "Reason: $reason"
+                        )
+                    }
+
+                    if (isTimer) {
+                        val accepted = settings.timerEnabled
+                        val reason = if (accepted) {
+                            "Matched timer pattern (title/text contains 'timer' or isCountDown is true or action has '+1'/'add'/'cancel') and settings.timerEnabled is true."
+                        } else {
+                            "Matched timer pattern, but rejected because settings.timerEnabled is false."
+                        }
+                        com.novabar.app.utils.DeveloperLogger.log(
+                            applicationContext,
+                            "TIMER_DETECTION",
+                            "Package: $packageName\n" +
+                            "Title: $title\n" +
+                            "Extras: $extrasStr\n" +
+                            "Chronometer Fields: $chronometerFields\n" +
+                            "Detection Result: ${if (accepted) "ACCEPTED" else "REJECTED"}\n" +
+                            "Reason: $reason"
+                        )
+                    }
+
+                    if (!isStopwatch && !isTimer) {
+                        com.novabar.app.utils.DeveloperLogger.log(
+                            applicationContext,
+                            "CLOCK_DETECTION",
+                            "Package: $packageName\n" +
+                            "Title: $title\n" +
+                            "Extras: $extrasStr\n" +
+                            "Chronometer Fields: $chronometerFields\n" +
+                            "Detection Result: REJECTED\n" +
+                            "Reason: Clock notification did not match stopwatch or timer pattern."
+                        )
+                    }
+                    
                     if (isStopwatch && settings.stopwatchEnabled) {
                         activeStopwatchSbn = sbn
                         val isRunning = actionTitles.any { it.contains("pause") || it.contains("lap") }
