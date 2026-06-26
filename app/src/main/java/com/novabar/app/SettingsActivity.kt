@@ -1293,7 +1293,25 @@ fun GeneralSettingsScreen(viewModel: SettingsViewModel, settings: NovaSettings) 
             ) {
                 Text("Sizing & Presentation", fontSize = 14.sp, fontWeight = FontWeight.Bold)
 
-
+                Text("Default Presentation Mode", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Minimized", "Compact").forEach { mode ->
+                        val selected = settings.defaultPresentationMode == mode
+                        Button(
+                            onClick = { viewModel.setDefaultPresentationMode(mode) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(mode, fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+                }
 
                 Text("Overlay Position", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 Row(
