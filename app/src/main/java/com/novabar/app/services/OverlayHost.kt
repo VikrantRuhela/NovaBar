@@ -96,7 +96,7 @@ class OverlayHost(private val context: Context) {
         val screenHeightPx = context.resources.displayMetrics.heightPixels
 
         val targetY = (settings.offsetY * density).toInt()
-        val clampedY = targetY.coerceIn(0, (screenHeightPx - maxSupportedHeightPx).coerceAtLeast(0))
+        val clampedY = targetY.coerceIn((-200 * density).toInt(), (screenHeightPx - maxSupportedHeightPx).coerceAtLeast(0))
 
         val baseX = (settings.offsetX * density).toInt()
         val clampedX = when (settings.barGravity) {

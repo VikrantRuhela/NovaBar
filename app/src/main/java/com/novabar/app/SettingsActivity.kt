@@ -735,8 +735,8 @@ fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings)
                                     }
                                 )
                                 .offset(
-                                    x = (settings.offsetX / 12).dp,
-                                    y = ((settings.offsetY.coerceIn(0, 100)) / 10).dp
+                                    x = (settings.offsetX / 12f).dp,
+                                    y = (settings.offsetY.coerceIn(-50, 400) / 10f).dp
                                 )
                                 .background(
                                     color = Color.White.copy(alpha = opacity),
@@ -758,7 +758,7 @@ fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .offset(y = ((settings.offsetY.coerceIn(0, 100)) / 10).dp),
+                                .offset(y = (settings.offsetY.coerceIn(-50, 400) / 10f).dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.Top
                         ) {

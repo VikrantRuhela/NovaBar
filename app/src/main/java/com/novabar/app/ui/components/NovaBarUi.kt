@@ -2123,14 +2123,16 @@ fun NavigationView(
                 horizontalArrangement = Arrangement.Center
             ) {
                 val cleanedDistance = cleanDistanceText(state.distanceRemaining)
-                Text(
-                    text = cleanedDistance.ifEmpty { "Nav" },
-                    color = color,
-                    fontSize = (if (currentState == NowBarState.MINIMIZED) 11f else 11f + sizeOffset).sp,
-                    fontWeight = if (currentState == NowBarState.MINIMIZED) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (cleanedDistance.isNotEmpty()) {
+                    Text(
+                        text = cleanedDistance,
+                        color = color,
+                        fontSize = (if (currentState == NowBarState.MINIMIZED) 11f else 11f + sizeOffset).sp,
+                        fontWeight = if (currentState == NowBarState.MINIMIZED) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         return
@@ -2245,8 +2247,26 @@ fun NavigationView(
                     Column(
                         verticalArrangement = Arrangement.Center
                     ) {
+                        val contextTitle = when {
+                            state.roadName.isNotEmpty() -> {
+                                val road = state.roadName.trim()
+                                if (road.startsWith("towards", ignoreCase = true)) road else "Towards $road"
+                            }
+                            state.maneuverInstruction.isNotEmpty() && state.maneuverInstruction.contains("towards", ignoreCase = true) -> {
+                                state.maneuverInstruction.trim()
+                            }
+                            state.destination.isNotEmpty() -> {
+                                val dest = state.destination.trim()
+                                if (dest.startsWith("towards", ignoreCase = true)) dest else "Towards $dest"
+                            }
+                            state.maneuverInstruction.isNotEmpty() -> {
+                                val instr = state.maneuverInstruction.trim()
+                                if (instr.startsWith("towards", ignoreCase = true)) instr else "Towards $instr"
+                            }
+                            else -> "Navigating"
+                        }
                         Text(
-                            text = state.distanceRemaining.ifEmpty { "Navigating" },
+                            text = state.distanceRemaining.ifEmpty { contextTitle },
                             color = color,
                             fontSize = (22f + sizeOffset).sp,
                             fontWeight = FontWeight.ExtraBold,
