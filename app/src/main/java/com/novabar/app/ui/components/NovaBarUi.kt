@@ -2166,87 +2166,63 @@ fun NavigationView(
                     .fillMaxSize()
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 if (state.maneuverIcon != null) {
                     DrawableImage(
                         drawable = state.maneuverIcon,
                         tintColor = Color(0xFF2196F3),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 } else {
                     ManeuverIcon(
                         type = state.maneuverType,
                         color = Color(0xFF2196F3),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = state.maneuverInstruction.ifEmpty { "Navigating..." },
-                        color = color,
-                        fontSize = (12f + sizeOffset).sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (state.distanceRemaining.isNotEmpty()) {
-                        Text(
-                            text = state.distanceRemaining,
-                            color = color.copy(alpha = 0.6f),
-                            fontSize = (10f + sizeOffset).sp,
-                            maxLines = 1
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = state.distanceRemaining.ifEmpty { "Nav" },
+                    color = color,
+                    fontSize = (13f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
         NowBarState.EXPANDED -> {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp)
+                    .padding(12.dp)
                     .graphicsLayer { alpha = contentAlpha },
-                verticalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (state.maneuverIcon != null) {
-                        DrawableImage(
-                            drawable = state.maneuverIcon,
-                            tintColor = Color(0xFF2196F3),
-                            modifier = Modifier.size(28.dp)
-                        )
-                    } else {
-                        ManeuverIcon(
-                            type = state.maneuverType,
-                            color = Color(0xFF2196F3),
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = state.maneuverInstruction.ifEmpty { "Navigation" },
-                            color = color,
-                            fontSize = (15f + sizeOffset).sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = state.appName.ifEmpty { "Google Maps" },
-                            color = color.copy(alpha = 0.5f),
-                            fontSize = (10f + sizeOffset).sp
-                        )
-                    }
+                if (state.maneuverIcon != null) {
+                    DrawableImage(
+                        drawable = state.maneuverIcon,
+                        tintColor = Color(0xFF2196F3),
+                        modifier = Modifier.size(32.dp)
+                    )
+                } else {
+                    ManeuverIcon(
+                        type = state.maneuverType,
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Distance remaining: ${state.distanceRemaining}", color = color.copy(alpha = 0.8f), fontSize = (12f + sizeOffset).sp)
-                    if (etaFormatted.isNotEmpty()) {
-                        Text("Estimated arrival (ETA): $etaFormatted", color = color.copy(alpha = 0.6f), fontSize = (11f + sizeOffset).sp)
-                    }
-                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = state.distanceRemaining.ifEmpty { "Nav" },
+                    color = color,
+                    fontSize = (15f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
