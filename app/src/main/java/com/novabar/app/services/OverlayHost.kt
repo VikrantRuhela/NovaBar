@@ -43,6 +43,8 @@ class OverlayHost(private val context: Context) {
     private var currentSettings: NovaSettings? = null
     private var scope: CoroutineScope? = null
     private var windowJob: Job? = null
+    private var maxSupportedWidthPx = 0
+    private var maxSupportedHeightPx = 0
     private var visibilityProvider: com.novabar.app.utils.SystemBarVisibilityProvider? = null
 
     private val lockscreenReceiver = object : BroadcastReceiver() {
@@ -78,7 +80,8 @@ class OverlayHost(private val context: Context) {
             205 // Expanded height
         )
         val maxSupportedHeightDp = heights.maxOrNull() ?: 205
-        val maxSupportedHeightPx = (maxSupportedHeightDp * density).toInt()
+        this.maxSupportedHeightPx = (maxSupportedHeightDp * density).toInt()
+        val maxSupportedHeightPx = this.maxSupportedHeightPx
 
         val widths = listOf(
             (115f * settings.barWidthScale).toInt(),
@@ -86,7 +89,8 @@ class OverlayHost(private val context: Context) {
             290 // Expanded width
         )
         val maxSupportedWidthDp = widths.maxOrNull() ?: 290
-        val maxSupportedWidthPx = (maxSupportedWidthDp * density).toInt()
+        this.maxSupportedWidthPx = (maxSupportedWidthDp * density).toInt()
+        val maxSupportedWidthPx = this.maxSupportedWidthPx
 
         val screenWidthPx = context.resources.displayMetrics.widthPixels
         val screenHeightPx = context.resources.displayMetrics.heightPixels
@@ -134,7 +138,7 @@ class OverlayHost(private val context: Context) {
         val initialHeightPx = (initialHeightDp * density).toInt()
 
         val layoutParams = WindowManager.LayoutParams(
-            initialWidthPx,
+            maxSupportedWidthPx,
             initialHeightPx,
             windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -162,6 +166,23 @@ class OverlayHost(private val context: Context) {
                 } else {
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val blurRad = settings.blurRadius
+                if (blurRad > 0) {
+                    blurBehindRadius = (blurRad * density).toInt()
+                    flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                    com.novabar.app.domain.DiagnosticsManager.blurEnabled.value = true
+                    com.novabar.app.domain.DiagnosticsManager.blurBackend.value = "WindowManager (FLAG_BLUR_BEHIND)"
+                } else {
+                    flags = flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+                    com.novabar.app.domain.DiagnosticsManager.blurEnabled.value = false
+                    com.novabar.app.domain.DiagnosticsManager.blurBackend.value = "None"
+                }
+            } else {
+                com.novabar.app.domain.DiagnosticsManager.blurEnabled.value = false
+                com.novabar.app.domain.DiagnosticsManager.blurBackend.value = "Unsupported (< API 31)"
             }
         }
 
@@ -194,6 +215,7 @@ class OverlayHost(private val context: Context) {
 
             val view = ComposeView(context).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 setContent {
                     NovaBarUi()
                 }
@@ -330,51 +352,18 @@ class OverlayHost(private val context: Context) {
         val compose = composeView ?: return
         val density = context.resources.displayMetrics.density
 
-        val targetWidth: Int
+        val targetWidth = maxSupportedWidthPx
         val targetHeight: Int
         when (mode) {
             "Minimized" -> {
-                val w = if (settings.cameraCutoutMode) {
-                    val hasCenteredPunchHole = com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value
-                    val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.value
-                    val cutoutWidthDp = cutoutWidthPx / density
-                    val safetyPadding = 12f
-                    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
-                        cutoutWidthDp + safetyPadding
-                    } else {
-                        36f
-                    }
-                    val targetGap = baseGap * settings.cameraCutoutGapScale
-                    (settings.leftSegmentWidthDp * settings.barWidthScale) + targetGap + (settings.rightSegmentWidthDp * settings.barWidthScale)
-                } else {
-                    115f * settings.barWidthScale
-                }
                 val h = (38 + settings.barHeightPadding).coerceAtLeast(24)
-                targetWidth = (w * density).toInt()
                 targetHeight = (h * density).toInt()
             }
             "Compact" -> {
-                val w = if (settings.cameraCutoutMode) {
-                    val hasCenteredPunchHole = com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.value
-                    val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.value
-                    val cutoutWidthDp = cutoutWidthPx / density
-                    val safetyPadding = 12f
-                    val baseGap = if (hasCenteredPunchHole && cutoutWidthPx > 0) {
-                        cutoutWidthDp + safetyPadding
-                    } else {
-                        36f
-                    }
-                    val targetGap = baseGap * settings.cameraCutoutGapScale
-                    (settings.leftSegmentWidthDp * settings.barWidthScale) + targetGap + (settings.rightSegmentWidthDp * settings.barWidthScale)
-                } else {
-                    185f * settings.barWidthScale
-                }
                 val h = (44 + settings.barHeightPadding).coerceAtLeast(30)
-                targetWidth = (w * density).toInt()
                 targetHeight = (h * density).toInt()
             }
             else -> { // "Expanded"
-                targetWidth = (290 * density).toInt()
                 targetHeight = (205 * density).toInt()
             }
         }

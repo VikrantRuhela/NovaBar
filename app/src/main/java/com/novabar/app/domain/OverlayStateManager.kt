@@ -162,6 +162,20 @@ object OverlayStateManager {
             list.add(OverlayState.Notification(notification))
         }
 
+        // Log active registry & priority order
+        val registryNames = list.map { it::class.java.simpleName }
+        Log.i("NovaBar-ActivityPriority", "Active Activity Registry: $registryNames")
+        Log.i("NovaBar-ActivityPriority", "  Registered Timer: isRunning=${timer?.isRunning}, remainingMs=${timer?.remainingMs}, durationMs=${timer?.durationMs}")
+        Log.i("NovaBar-ActivityPriority", "  Registered Media: isPlaying=${media?.isPlaying}, title='${media?.title}', appName='${media?.appName}'")
+        
+        // Log rejection reasons if they are registered but rejected from the list
+        if (timer != null && !(timer.isRunning || timer.remainingMs > 0)) {
+            Log.d("NovaBar-ActivityPriority", "  Timer rejected because it is not running and has 0 remaining time.")
+        }
+        if (media != null && media.title.isEmpty()) {
+            Log.d("NovaBar-ActivityPriority", "  Media rejected because title is empty.")
+        }
+
         list
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
@@ -190,19 +204,37 @@ object OverlayStateManager {
         activeActivities,
         selectedActivityIndex
     ) { list, index ->
-        if (list.isEmpty()) {
+        val state = if (list.isEmpty()) {
             OverlayState.Idle
         } else {
             val clampedIndex = index.coerceIn(0, list.lastIndex)
             list[clampedIndex]
         }
+        
+        val registryNames = list.map { it::class.java.simpleName }
+        val selectedName = state::class.java.simpleName
+        Log.i("NovaBar-ActivityPriority", "Display Priority Decision: Selected='$selectedName' (index=$index) from registry $registryNames")
+        if (list.isNotEmpty()) {
+            val builder = StringBuilder("  Selection details:\n")
+            list.forEachIndexed { i, s ->
+                val activeIndicator = if (i == index) "-->" else "   "
+                builder.append("    $activeIndicator [$i] ${s::class.java.simpleName}\n")
+            }
+            Log.i("NovaBar-ActivityPriority", builder.toString().trimEnd())
+        }
+        
+        state
     }.stateIn(scope, SharingStarted.Eagerly, OverlayState.Idle)
 
     init {
-        // Automatically focus on new activities that arrive
+        // Automatically focus on new activities that arrive, and auto-focus media when playback starts
         scope.launch {
             var previousList = emptyList<OverlayState>()
+            var wasMediaPlaying = false
             activeActivities.collect { currentList ->
+                val currentMedia = currentList.firstOrNull { it is OverlayState.Media } as? OverlayState.Media
+                val isMediaPlaying = currentMedia?.data?.isPlaying == true
+                
                 val newlyAdded = currentList.firstOrNull { newItem ->
                     previousList.none { it::class.java == newItem::class.java }
                 }
@@ -210,6 +242,29 @@ object OverlayStateManager {
                 if (newlyAdded != null) {
                     val index = currentList.indexOf(newlyAdded)
                     selectedActivityIndex.value = index
+                    Log.i("NovaBar-ActivityPriority", "Focusing on newly registered activity: ${newlyAdded::class.java.simpleName} at index $index.")
+                } else if (isMediaPlaying && !wasMediaPlaying) {
+                    // Check if current focused activity has lower priority than Media
+                    val currentIndex = selectedActivityIndex.value
+                    val currentState = if (currentIndex in currentList.indices) currentList[currentIndex] else OverlayState.Idle
+                    val isLowerPriorityThanMedia = when (currentState) {
+                        is OverlayState.Idle,
+                        is OverlayState.Hotspot,
+                        is OverlayState.Charging,
+                        is OverlayState.Timer,
+                        is OverlayState.Stopwatch,
+                        is OverlayState.Notification -> true
+                        else -> false
+                    }
+                    if (isLowerPriorityThanMedia) {
+                        val index = currentList.indexOfFirst { it is OverlayState.Media }
+                        if (index >= 0) {
+                            selectedActivityIndex.value = index
+                            Log.i("NovaBar-ActivityPriority", "Auto-focusing on Media at index $index because playback started and current activity (${currentState::class.java.simpleName}) is lower priority.")
+                        }
+                    } else {
+                        Log.i("NovaBar-ActivityPriority", "Playback started but keeping current focus on higher/equal priority activity: ${currentState::class.java.simpleName}.")
+                    }
                 } else {
                     val currentIndex = selectedActivityIndex.value
                     if (currentIndex >= currentList.size) {
@@ -217,6 +272,7 @@ object OverlayStateManager {
                     }
                 }
                 previousList = currentList
+                wasMediaPlaying = isMediaPlaying
             }
         }
         scope.launch {

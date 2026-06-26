@@ -57,6 +57,10 @@ enum class ManeuverType {
     ROUNDABOUT_EXIT,
     DESTINATION,
     ARRIVAL,
+    FORK_LEFT,
+    FORK_RIGHT,
+    RAMP_LEFT,
+    RAMP_RIGHT,
     UNKNOWN
 }
 

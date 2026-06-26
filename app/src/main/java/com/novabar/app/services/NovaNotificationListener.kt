@@ -659,7 +659,10 @@ class NovaNotificationListener : NotificationListenerService() {
 
                 // Check if it is a media notification, and if so, update active sessions immediately as a backup
                 val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
+                        extras.containsKey(Notification.EXTRA_MEDIA_SESSION) ||
                         notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION) ||
+                        extras.getString("android.template")?.contains("MediaStyle") == true ||
+                        extras.getCharSequence("android.template")?.toString()?.contains("MediaStyle") == true ||
                         packageName.contains("spotify") || packageName.contains("music") || packageName.contains("poweramp")
                 
                 if (isMedia) {
@@ -720,13 +723,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
                     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
                     val category = sbn.notification.category ?: "null"
-                    val extrasStr = com.novabar.app.utils.DeveloperLogger.bundleToReadableString(extras)
                     Log.i("NovaBar-Navigation", "Navigation Notification Received:\n" +
                             "Package: $packageName\n" +
                             "Category: $category\n" +
                             "Title: '$title'\n" +
                             "Text: '$text'\n" +
-                            "Extras: $extrasStr\n" +
                             "isNav classification: $isNav\n" +
                             "navigationEnabled: ${settings.navigationEnabled}")
                 }
@@ -734,15 +735,25 @@ class NovaNotificationListener : NotificationListenerService() {
                 if (isNav && settings.navigationEnabled) {
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
                     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                    val subtext = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
                     val eta = extras.getCharSequence("android.car.EXTENSIONS")?.toString() ?: "" // Fallback
                     
-                    val largeIcon = notification.getLargeIcon() ?: notification.smallIcon
-                    val drawable = try {
-                        largeIcon?.loadDrawable(this@NovaNotificationListener)
-                    } catch (e: Exception) {
-                        null
+                    // 1. Try to extract RemoteViews drawable (LiveBridge approach)
+                    var drawable = com.novabar.app.utils.NavigationCompatibilityLayer.extractManeuverDrawable(sbn, this@NovaNotificationListener)
+                    var drawableSource = "RemoteViews (LiveBridge)"
+                    
+                    if (drawable == null) {
+                        // Fallback to standard notification icon
+                        val largeIcon = notification.getLargeIcon() ?: notification.smallIcon
+                        drawable = try {
+                            largeIcon?.loadDrawable(this@NovaNotificationListener)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        drawableSource = if (drawable != null) "Notification LargeIcon/SmallIcon" else "None"
                     }
 
+                    // 2. Parse maneuver type
                     val maneuverType = com.novabar.app.utils.NavigationCompatibilityLayer.parse(sbn, this@NovaNotificationListener)
 
                     val appLabel = try {
@@ -753,7 +764,48 @@ class NovaNotificationListener : NotificationListenerService() {
                         "Navigation"
                     }
 
-                    Log.i("NovaBar-Navigation", "Classification SUCCESS: Registering navigation activity with maneuver: $maneuverType from app: $appLabel")
+                    // 3. Try to extract raw resource ID/name for logging
+                    var rawManeuverResName = "N/A"
+                    var rawManeuverResId = -1
+                    try {
+                        val packageContext = createPackageContext(packageName, 0)
+                        val resources = packageContext.resources
+                        val resId =
+                            com.novabar.app.utils.GoogleMapsProvider.extractFirstRemoteDrawableResId(notification.contentView, resources)
+                                ?: com.novabar.app.utils.GoogleMapsProvider.extractFirstRemoteDrawableResId(notification.bigContentView, resources)
+                                ?: com.novabar.app.utils.GoogleMapsProvider.extractFirstRemoteDrawableResId(notification.headsUpContentView, resources)
+                        if (resId != null && resId > 0) {
+                            rawManeuverResId = resId
+                            rawManeuverResName = resources.getResourceEntryName(resId)
+                        }
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+
+                    // 4. Output detailed diagnostic logging
+                    val logMsg = StringBuilder().apply {
+                        append("=== NAVIGATION PIPELINE DIAGNOSTIC ===\n")
+                        append("Raw Notification Payload:\n")
+                        append("  Package Name: $packageName\n")
+                        append("  App Label: $appLabel\n")
+                        append("  Title: '$title'\n")
+                        append("  Text: '$text'\n")
+                        append("  Subtext: '$subtext'\n")
+                        append("  Category: ${notification.category}\n")
+                        append("Raw Maneuver Values:\n")
+                        append("  Extracted Drawable Res ID: $rawManeuverResId\n")
+                        append("  Extracted Drawable Entry Name: $rawManeuverResName\n")
+                        append("Maneuver Parsing:\n")
+                        append("  Text-parsed (Fallback): ${com.novabar.app.utils.NavigationTextParser.parse(title, text)}\n")
+                        append("  Final ManeuverType Assigned: $maneuverType\n")
+                        append("Drawable Resolution:\n")
+                        append("  Drawable Source Selected: $drawableSource\n")
+                        append("  Drawable Instance Resolved: ${drawable != null}\n")
+                        append("======================================")
+                    }.toString()
+                    
+                    Log.i("NovaBar-Navigation", logMsg)
+                    com.novabar.app.utils.DeveloperLogger.log(this@NovaNotificationListener, "NavigationCompat", logMsg)
 
                     OverlayStateManager.navigationState.value = NavigationState(
                         maneuverInstruction = title,
@@ -770,6 +822,7 @@ class NovaNotificationListener : NotificationListenerService() {
                 }
 
                 // 2. Check if Clock app (Timer or Stopwatch)
+
                 val isClock = packageName.contains("clock", ignoreCase = true) || 
                         packageName.contains("deskclock", ignoreCase = true) || 
                         packageName.contains("alarm", ignoreCase = true)
@@ -782,22 +835,54 @@ class NovaNotificationListener : NotificationListenerService() {
                     it.contains("start") || it.contains("reset")
                 }
                 
-                val isClockLike = isClock || showChronometer || hasClockActions
+                val isClockLike = !isMedia && (isClock || showChronometer || hasClockActions)
                 if (isClockLike) {
                     when (val clockState = com.novabar.app.utils.ClockCompatibilityLayer.parse(sbn, settings, this@NovaNotificationListener)) {
                         is com.novabar.app.utils.ParsedClockState.Stopwatch -> {
+                            if (activeTimerSbn?.key == sbn.key) {
+                                Log.i("NovaBar-Timer", "Activity removal: clearing active timer state because notification is now stopwatch.")
+                                activeTimerSbn = null
+                                OverlayStateManager.setTimerState(null)
+                            }
+                            Log.i("NovaBar-Stopwatch", "Stopwatch notification registered/updated. State: isRunning=${clockState.state.isRunning}, elapsed=${clockState.state.elapsedMs}")
                             activeStopwatchSbn = sbn
                             OverlayStateManager.setStopwatchState(clockState.state)
                             return@launch
                         }
                         is com.novabar.app.utils.ParsedClockState.Timer -> {
+                            if (activeStopwatchSbn?.key == sbn.key) {
+                                Log.i("NovaBar-Stopwatch", "Activity removal: clearing active stopwatch state because notification is now timer.")
+                                activeStopwatchSbn = null
+                                OverlayStateManager.setStopwatchState(null)
+                            }
+                            Log.i("NovaBar-Timer", "Timer notification registered/updated. State: isRunning=${clockState.state.isRunning}, remaining=${clockState.state.remainingMs}")
                             activeTimerSbn = sbn
                             OverlayStateManager.setTimerState(clockState.state)
                             return@launch
                         }
                         com.novabar.app.utils.ParsedClockState.None -> {
-                            // Do nothing, let it flow to other notification handlers
+                            if (activeTimerSbn?.key == sbn.key) {
+                                Log.i("NovaBar-Timer", "Activity removal: removing active timer state because notification update parsed as ParsedClockState.None.")
+                                activeTimerSbn = null
+                                OverlayStateManager.setTimerState(null)
+                            }
+                            if (activeStopwatchSbn?.key == sbn.key) {
+                                Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification update parsed as ParsedClockState.None.")
+                                activeStopwatchSbn = null
+                                OverlayStateManager.setStopwatchState(null)
+                            }
                         }
+                    }
+                } else {
+                    if (activeTimerSbn?.key == sbn.key) {
+                        Log.i("NovaBar-Timer", "Activity removal: removing active timer state because notification is no longer clock-like.")
+                        activeTimerSbn = null
+                        OverlayStateManager.setTimerState(null)
+                    }
+                    if (activeStopwatchSbn?.key == sbn.key) {
+                        Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification is no longer clock-like.")
+                        activeStopwatchSbn = null
+                        OverlayStateManager.setStopwatchState(null)
                     }
                 }
 

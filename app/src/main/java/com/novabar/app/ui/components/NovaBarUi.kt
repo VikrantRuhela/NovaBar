@@ -64,6 +64,10 @@ import kotlin.math.sin
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
+import android.os.Build
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 
 fun drawableToBitmap(drawable: android.graphics.drawable.Drawable?): Bitmap? {
     if (drawable == null) return null
@@ -83,6 +87,35 @@ fun drawableToBitmap(drawable: android.graphics.drawable.Drawable?): Bitmap? {
     drawable.setBounds(0, 0, canvas.width, canvas.height)
     drawable.draw(canvas)
     return bitmap
+}
+
+@Composable
+fun DrawableImage(
+    drawable: Drawable,
+    modifier: Modifier = Modifier,
+    tintColor: Color? = null
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width.toInt()
+        val h = size.height.toInt()
+        drawable.setBounds(0, 0, w, h)
+        
+        if (tintColor != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                drawable.colorFilter = android.graphics.BlendModeColorFilter(
+                    tintColor.toArgb(),
+                    android.graphics.BlendMode.SRC_IN
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                drawable.setColorFilter(tintColor.toArgb(), android.graphics.PorterDuff.Mode.SRC_IN)
+            }
+        }
+        
+        drawIntoCanvas { canvas ->
+            drawable.draw(canvas.nativeCanvas)
+        }
+    }
 }
 
 @Composable
@@ -233,7 +266,8 @@ fun NovaBarUi() {
         }.distinctUntilChanged()
     }.collectAsState(initial = "Idle")
     val settings by viewModel.settingsFlow.collectAsState()
-    val isDarkBg by viewModel.isDarkBackground.collectAsState()
+    val isDarkBgFromLuminance by viewModel.isDarkBackground.collectAsState()
+    val isDarkBg = if (settings.colorAdaptationEnabled) isDarkBgFromLuminance else androidx.compose.foundation.isSystemInDarkTheme()
     val isExpanded by OverlayStateManager.isExpanded.collectAsState()
     val activeList by remember {
         OverlayStateManager.activeActivities.map { list ->
@@ -830,7 +864,6 @@ fun NovaBarUi() {
                             rect.bottom.roundToInt()
                         )
                     }
-                    .shadow(elevation = 12.dp, shape = RoundedCornerShape(animatedCornerRadius))
                     .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
                     .clip(RoundedCornerShape(animatedCornerRadius))
                     .background(backgroundColor)
@@ -1241,7 +1274,7 @@ fun ChargingPill(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(if (currentState == NowBarState.MINIMIZED) 12.dp else 14.dp))
+                    BoltIcon(color = color, modifier = Modifier.size(if (currentState == NowBarState.MINIMIZED) 12.dp else 14.dp))
                 }
             } else {
                 Row(
@@ -1270,7 +1303,7 @@ fun ChargingPill(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
                     ) {
-                        BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(12.dp))
+                        BoltIcon(color = color, modifier = Modifier.size(12.dp))
                         Text(
                             text = "${state.batteryPercentage}%",
                             color = color,
@@ -1289,7 +1322,7 @@ fun ChargingPill(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(14.dp))
+                        BoltIcon(color = color, modifier = Modifier.size(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Charging ${state.batteryPercentage}%",
@@ -1322,7 +1355,7 @@ fun ChargingPill(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            BoltIcon(color = Color(0xFFFFEB3B), modifier = Modifier.size(24.dp))
+                            BoltIcon(color = color, modifier = Modifier.size(24.dp))
                             Column {
                                 Text(
                                     text = "Charging ${state.batteryPercentage}%",
@@ -2062,11 +2095,19 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                ManeuverIcon(
-                    type = state.maneuverType,
-                    color = Color(0xFF2196F3),
-                    modifier = Modifier.size(if (currentState == NowBarState.MINIMIZED) 14.dp else 16.dp)
-                )
+                if (state.maneuverIcon != null) {
+                    DrawableImage(
+                        drawable = state.maneuverIcon,
+                        tintColor = Color(0xFF2196F3),
+                        modifier = Modifier.size(if (currentState == NowBarState.MINIMIZED) 14.dp else 16.dp)
+                    )
+                } else {
+                    ManeuverIcon(
+                        type = state.maneuverType,
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.size(if (currentState == NowBarState.MINIMIZED) 14.dp else 16.dp)
+                    )
+                }
             }
         } else {
             Row(
@@ -2096,11 +2137,19 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
             ) {
-                ManeuverIcon(
-                    type = state.maneuverType,
-                    color = Color(0xFF2196F3),
-                    modifier = Modifier.size(14.dp)
-                )
+                if (state.maneuverIcon != null) {
+                    DrawableImage(
+                        drawable = state.maneuverIcon,
+                        tintColor = Color(0xFF2196F3),
+                        modifier = Modifier.size(14.dp)
+                    )
+                } else {
+                    ManeuverIcon(
+                        type = state.maneuverType,
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
                 Text(
                     text = state.distanceRemaining.ifEmpty { "Nav" },
                     color = color,
@@ -2119,11 +2168,19 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ManeuverIcon(
-                    type = state.maneuverType,
-                    color = Color(0xFF2196F3),
-                    modifier = Modifier.size(18.dp)
-                )
+                if (state.maneuverIcon != null) {
+                    DrawableImage(
+                        drawable = state.maneuverIcon,
+                        tintColor = Color(0xFF2196F3),
+                        modifier = Modifier.size(18.dp)
+                    )
+                } else {
+                    ManeuverIcon(
+                        type = state.maneuverType,
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = state.maneuverInstruction.ifEmpty { "Navigating..." },
@@ -2157,11 +2214,19 @@ fun NavigationView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    ManeuverIcon(
-                        type = state.maneuverType,
-                        color = Color(0xFF2196F3),
-                        modifier = Modifier.size(28.dp)
-                    )
+                    if (state.maneuverIcon != null) {
+                        DrawableImage(
+                            drawable = state.maneuverIcon,
+                            tintColor = Color(0xFF2196F3),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    } else {
+                        ManeuverIcon(
+                            type = state.maneuverType,
+                            color = Color(0xFF2196F3),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                     Column {
                         Text(
                             text = state.maneuverInstruction.ifEmpty { "Navigation" },
@@ -3870,6 +3935,56 @@ fun ManeuverIcon(type: com.novabar.app.domain.ManeuverType, color: Color, modifi
                     radius = w * 0.1f,
                     center = Offset(cx, cy - h * 0.08f)
                 )
+            }
+            com.novabar.app.domain.ManeuverType.FORK_LEFT -> {
+                drawLine(color = color, start = Offset(cx, h * 0.85f), end = Offset(cx, h * 0.55f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                val pathLeft = Path().apply {
+                    moveTo(cx, h * 0.55f)
+                    quadraticBezierTo(cx, h * 0.35f, cx - w * 0.2f, h * 0.25f)
+                }
+                drawPath(pathLeft, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                val pathRight = Path().apply {
+                    moveTo(cx, h * 0.55f)
+                    quadraticBezierTo(cx, h * 0.35f, cx + w * 0.2f, h * 0.25f)
+                }
+                drawPath(pathRight, color.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(color = color, start = Offset(cx - w * 0.3f, h * 0.35f), end = Offset(cx - w * 0.2f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = color, start = Offset(cx - w * 0.1f, h * 0.15f), end = Offset(cx - w * 0.2f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            }
+            com.novabar.app.domain.ManeuverType.FORK_RIGHT -> {
+                drawLine(color = color, start = Offset(cx, h * 0.85f), end = Offset(cx, h * 0.55f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                val pathRight = Path().apply {
+                    moveTo(cx, h * 0.55f)
+                    quadraticBezierTo(cx, h * 0.35f, cx + w * 0.2f, h * 0.25f)
+                }
+                drawPath(pathRight, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                val pathLeft = Path().apply {
+                    moveTo(cx, h * 0.55f)
+                    quadraticBezierTo(cx, h * 0.35f, cx - w * 0.2f, h * 0.25f)
+                }
+                drawPath(pathLeft, color.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(color = color, start = Offset(cx + w * 0.3f, h * 0.35f), end = Offset(cx + w * 0.2f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = color, start = Offset(cx + w * 0.1f, h * 0.15f), end = Offset(cx + w * 0.2f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            }
+            com.novabar.app.domain.ManeuverType.RAMP_LEFT -> {
+                drawLine(color = color.copy(alpha = 0.3f), start = Offset(cx + w * 0.1f, h * 0.85f), end = Offset(cx + w * 0.1f, h * 0.15f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                val path = Path().apply {
+                    moveTo(cx + w * 0.1f, h * 0.6f)
+                    quadraticBezierTo(cx - w * 0.15f, h * 0.5f, cx - w * 0.25f, h * 0.25f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(color = color, start = Offset(cx - w * 0.35f, h * 0.38f), end = Offset(cx - w * 0.25f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = color, start = Offset(cx - w * 0.15f, h * 0.17f), end = Offset(cx - w * 0.25f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            }
+            com.novabar.app.domain.ManeuverType.RAMP_RIGHT -> {
+                drawLine(color = color.copy(alpha = 0.3f), start = Offset(cx - w * 0.1f, h * 0.85f), end = Offset(cx - w * 0.1f, h * 0.15f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                val path = Path().apply {
+                    moveTo(cx - w * 0.1f, h * 0.6f)
+                    quadraticBezierTo(cx + w * 0.15f, h * 0.5f, cx + w * 0.25f, h * 0.25f)
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round))
+                drawLine(color = color, start = Offset(cx + w * 0.35f, h * 0.38f), end = Offset(cx + w * 0.25f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = color, start = Offset(cx + w * 0.15f, h * 0.17f), end = Offset(cx + w * 0.25f, h * 0.25f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
             }
             com.novabar.app.domain.ManeuverType.UNKNOWN -> {
                 val path = Path().apply {
