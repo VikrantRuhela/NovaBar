@@ -20,8 +20,6 @@ data class NovaSettings(
     val positionY: Int = 12, // Legacy position Y
     val cornerRadius: Int = 24, // dp
     val opacity: Float = 0.85f,
-    val blurRadius: Int = 25, // px
-    val animationSpeedMultiplier: Float = 1.0f,
     val mediaControlsEnabled: Boolean = true,
     val timerEnabled: Boolean = true,
     val stopwatchEnabled: Boolean = true,
@@ -59,7 +57,11 @@ data class NovaSettings(
     val cameraCutoutGapScale: Float = 1.0f,
     val leftSegmentWidthDp: Int = 120,
     val rightSegmentWidthDp: Int = 120,
-    val followStatusBarVisibility: Boolean = true
+    val followStatusBarVisibility: Boolean = true,
+    val torchEnabled: Boolean = true,
+    val hotspotEnabled: Boolean = true,
+    val debugModeEnabled: Boolean = false,
+    val pillTextSize: Float = 0.0f
 )
 
 class SettingsRepository(private val context: Context) {
@@ -69,8 +71,6 @@ class SettingsRepository(private val context: Context) {
         private val POSITION_Y = intPreferencesKey("position_y")
         private val CORNER_RADIUS = intPreferencesKey("corner_radius")
         private val OPACITY = floatPreferencesKey("opacity")
-        private val BLUR_RADIUS = intPreferencesKey("blur_radius")
-        private val ANIMATION_SPEED = floatPreferencesKey("animation_speed")
         private val MEDIA_ENABLED = booleanPreferencesKey("media_enabled")
         private val TIMER_ENABLED = booleanPreferencesKey("timer_enabled")
         private val STOPWATCH_ENABLED = booleanPreferencesKey("stopwatch_enabled")
@@ -109,6 +109,10 @@ class SettingsRepository(private val context: Context) {
         private val LEFT_SEGMENT_WIDTH_DP = intPreferencesKey("left_segment_width_dp")
         private val RIGHT_SEGMENT_WIDTH_DP = intPreferencesKey("right_segment_width_dp")
         private val FOLLOW_STATUS_BAR_VISIBILITY = booleanPreferencesKey("follow_status_bar_visibility")
+        private val TORCH_ENABLED = booleanPreferencesKey("torch_enabled")
+        private val HOTSPOT_ENABLED = booleanPreferencesKey("hotspot_enabled")
+        private val DEBUG_MODE_ENABLED = booleanPreferencesKey("debug_mode_enabled")
+        private val PILL_TEXT_SIZE = floatPreferencesKey("pill_text_size")
     }
 
     val settingsFlow: Flow<NovaSettings> = context.dataStore.data.map { preferences ->
@@ -117,8 +121,6 @@ class SettingsRepository(private val context: Context) {
             positionY = preferences[POSITION_Y] ?: 12,
             cornerRadius = preferences[CORNER_RADIUS] ?: 24,
             opacity = preferences[OPACITY] ?: 0.85f,
-            blurRadius = preferences[BLUR_RADIUS] ?: 25,
-            animationSpeedMultiplier = preferences[ANIMATION_SPEED] ?: 1.0f,
             mediaControlsEnabled = preferences[MEDIA_ENABLED] ?: true,
             timerEnabled = preferences[TIMER_ENABLED] ?: true,
             stopwatchEnabled = preferences[STOPWATCH_ENABLED] ?: true,
@@ -157,7 +159,11 @@ class SettingsRepository(private val context: Context) {
             cameraCutoutGapScale = preferences[CAMERA_CUTOUT_GAP_SCALE] ?: 1.0f,
             leftSegmentWidthDp = preferences[LEFT_SEGMENT_WIDTH_DP] ?: 120,
             rightSegmentWidthDp = preferences[RIGHT_SEGMENT_WIDTH_DP] ?: 120,
-            followStatusBarVisibility = preferences[FOLLOW_STATUS_BAR_VISIBILITY] ?: true
+            followStatusBarVisibility = preferences[FOLLOW_STATUS_BAR_VISIBILITY] ?: true,
+            torchEnabled = preferences[TORCH_ENABLED] ?: true,
+            hotspotEnabled = preferences[HOTSPOT_ENABLED] ?: true,
+            debugModeEnabled = preferences[DEBUG_MODE_ENABLED] ?: false,
+            pillTextSize = preferences[PILL_TEXT_SIZE] ?: 0.0f
         )
     }
 
@@ -180,13 +186,6 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[OPACITY] = opacity }
     }
 
-    suspend fun updateBlurRadius(radius: Int) {
-        context.dataStore.edit { it[BLUR_RADIUS] = radius }
-    }
-
-    suspend fun updateAnimationSpeed(speed: Float) {
-        context.dataStore.edit { it[ANIMATION_SPEED] = speed }
-    }
 
     suspend fun updateMediaEnabled(enabled: Boolean) {
         context.dataStore.edit { it[MEDIA_ENABLED] = enabled }
@@ -352,14 +351,28 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[FOLLOW_STATUS_BAR_VISIBILITY] = follow }
     }
 
+    suspend fun updateTorchEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[TORCH_ENABLED] = enabled }
+    }
+
+    suspend fun updateHotspotEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[HOTSPOT_ENABLED] = enabled }
+    }
+
+    suspend fun updateDebugModeEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[DEBUG_MODE_ENABLED] = enabled }
+    }
+
+    suspend fun updatePillTextSize(size: Float) {
+        context.dataStore.edit { it[PILL_TEXT_SIZE] = size }
+    }
+
     suspend fun importSettings(s: NovaSettings) {
         context.dataStore.edit { preferences ->
             preferences[IS_ENABLED] = s.isEnabled
             preferences[POSITION_Y] = s.positionY
             preferences[CORNER_RADIUS] = s.cornerRadius
             preferences[OPACITY] = s.opacity
-            preferences[BLUR_RADIUS] = s.blurRadius
-            preferences[ANIMATION_SPEED] = s.animationSpeedMultiplier
             preferences[MEDIA_ENABLED] = s.mediaControlsEnabled
             preferences[TIMER_ENABLED] = s.timerEnabled
             preferences[STOPWATCH_ENABLED] = s.stopwatchEnabled
@@ -400,6 +413,10 @@ class SettingsRepository(private val context: Context) {
             preferences[LEFT_SEGMENT_WIDTH_DP] = s.leftSegmentWidthDp
             preferences[RIGHT_SEGMENT_WIDTH_DP] = s.rightSegmentWidthDp
             preferences[FOLLOW_STATUS_BAR_VISIBILITY] = s.followStatusBarVisibility
+            preferences[TORCH_ENABLED] = s.torchEnabled
+            preferences[HOTSPOT_ENABLED] = s.hotspotEnabled
+            preferences[DEBUG_MODE_ENABLED] = s.debugModeEnabled
+            preferences[PILL_TEXT_SIZE] = s.pillTextSize
         }
     }
 }

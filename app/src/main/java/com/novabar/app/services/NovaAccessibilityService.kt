@@ -62,6 +62,7 @@ class NovaAccessibilityService : AccessibilityService() {
         settingsJob?.cancel()
         settingsJob = scope.launch {
             settingsRepository.settingsFlow.collectLatest { settings ->
+                OverlayStateManager.settingsFlow.value = settings
                 if (settings.isEnabled && settings.overlayEngine == OverlayEngine.ACCESSIBILITY) {
                     showOverlay(settings)
                 } else {

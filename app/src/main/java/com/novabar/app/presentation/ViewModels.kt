@@ -56,14 +56,6 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         repository.updateOpacity(opacity)
     }
 
-    fun setBlurRadius(radius: Int) = viewModelScope.launch {
-        repository.updateBlurRadius(radius)
-    }
-
-    fun setAnimationSpeed(speed: Float) = viewModelScope.launch {
-        repository.updateAnimationSpeed(speed)
-    }
-
     fun setMediaEnabled(enabled: Boolean) = viewModelScope.launch {
         repository.updateMediaEnabled(enabled)
     }
@@ -206,6 +198,22 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
 
     fun setFollowStatusBarVisibility(follow: Boolean) = viewModelScope.launch {
         repository.updateFollowStatusBarVisibility(follow)
+    }
+
+    fun setTorchEnabled(enabled: Boolean) = viewModelScope.launch {
+        repository.updateTorchEnabled(enabled)
+    }
+
+    fun setHotspotEnabled(enabled: Boolean) = viewModelScope.launch {
+        repository.updateHotspotEnabled(enabled)
+    }
+
+    fun setDebugModeEnabled(enabled: Boolean) = viewModelScope.launch {
+        repository.updateDebugModeEnabled(enabled)
+    }
+
+    fun setPillTextSize(size: Float) = viewModelScope.launch {
+        repository.updatePillTextSize(size)
     }
 }
 

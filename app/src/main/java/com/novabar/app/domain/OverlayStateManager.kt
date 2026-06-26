@@ -8,11 +8,21 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.Manifest
 import com.novabar.app.services.NovaAccessibilityService
+import com.novabar.app.data.NovaSettings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 object OverlayStateManager {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    val settingsFlow = MutableStateFlow(NovaSettings())
+
+    init {
+        scope.launch {
+            settingsFlow.collectLatest { settings ->
+                DiagnosticsManager.showDebugMarkers.value = settings.debugModeEnabled
+            }
+        }
+    }
 
     val pillBounds = MutableStateFlow(Rect())
     val leftPillBounds = MutableStateFlow(Rect())
@@ -98,6 +108,8 @@ object OverlayStateManager {
         _notificationState.value = null
     }
 
+
+
     // List of active activities, ordered by priority: Call > Navigation > Torch > Media > Charging > Timer > Notifications
     val activeActivities: StateFlow<List<OverlayState>> = combine(
         phoneCallState,
@@ -110,7 +122,8 @@ object OverlayStateManager {
         _notificationState,
         isNotificationActive,
         torchState,
-        hotspotState
+        hotspotState,
+        settingsFlow
     ) { array ->
         val list = mutableListOf<OverlayState>()
         
@@ -125,40 +138,41 @@ object OverlayStateManager {
         val notificationActive = array[8] as Boolean
         val torch = array[9] as TorchState?
         val hotspot = array[10] as HotspotState?
+        val settings = array[11] as NovaSettings
 
         // Call (Priority 1)
         if (call != null && call.isActive) {
             list.add(OverlayState.PhoneCall(call))
         }
         // Navigation (Priority 2)
-        if (nav != null) {
+        if (nav != null && settings.navigationEnabled) {
             list.add(OverlayState.Navigation(nav))
         }
         // Torch (Priority 3)
-        if (torch != null && torch.isActive) {
+        if (torch != null && torch.isActive && settings.torchEnabled) {
             list.add(OverlayState.Torch(torch))
         }
         // Media (Priority 4)
-        if (media != null && media.title.isNotEmpty()) {
+        if (media != null && media.title.isNotEmpty() && settings.mediaControlsEnabled) {
             list.add(OverlayState.Media(media))
         }
         // Hotspot (Priority 5)
-        if (hotspot != null && hotspot.isActive) {
+        if (hotspot != null && hotspot.isActive && settings.hotspotEnabled) {
             list.add(OverlayState.Hotspot(hotspot))
         }
         // Charging (Priority 6)
-        if (chargingActive && charging != null) {
+        if (chargingActive && charging != null && settings.chargingEnabled) {
             list.add(OverlayState.Charging(charging))
         }
         // Timer/Stopwatch (Priority 7)
-        if (timer != null && (timer.isRunning || timer.remainingMs > 0)) {
+        if (timer != null && (timer.isRunning || timer.remainingMs > 0) && settings.timerEnabled) {
             list.add(OverlayState.Timer(timer))
         }
-        if (stopwatch != null && (stopwatch.isRunning || stopwatch.elapsedMs > 0)) {
+        if (stopwatch != null && (stopwatch.isRunning || stopwatch.elapsedMs > 0) && settings.stopwatchEnabled) {
             list.add(OverlayState.Stopwatch(stopwatch))
         }
         // Notification (Priority 8)
-        if (notificationActive && notification != null) {
+        if (notificationActive && notification != null && settings.notificationsEnabled) {
             list.add(OverlayState.Notification(notification))
         }
 

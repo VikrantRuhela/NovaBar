@@ -807,10 +807,119 @@ class NovaNotificationListener : NotificationListenerService() {
                     Log.i("NovaBar-Navigation", logMsg)
                     com.novabar.app.utils.DeveloperLogger.log(this@NovaNotificationListener, "NavigationCompat", logMsg)
 
+                    // 1. Gather all candidate text sources (subtext first, then RemoteViews)
+                    val remoteViewsTexts = extractRemoteViewsTexts(notification)
+                    val allCandidateTexts = mutableListOf<String>()
+                    if (subtext.isNotEmpty()) {
+                        allCandidateTexts.add(subtext)
+                    }
+                    allCandidateTexts.addAll(remoteViewsTexts)
+
+                    // 2. Parse ETA, Remaining Trip Distance, and Travel Duration (Trip Metadata)
+                    var parsedEta = ""
+                    var parsedRemainingDistance = ""
+                    var parsedRemainingTime = ""
+
+                    // Search for combined trip metadata formats
+                    for (candidate in allCandidateTexts) {
+                        val triple = parseTripMetadata(candidate)
+                        if (triple != null) {
+                            if (triple.first.isNotEmpty()) parsedEta = triple.first
+                            if (triple.second.isNotEmpty()) parsedRemainingDistance = triple.second
+                            if (triple.third.isNotEmpty()) parsedRemainingTime = triple.third
+                        }
+                    }
+
+                    // Fallback to standalone values if still empty
+                    for (candidate in allCandidateTexts) {
+                        val clean = candidate.trim()
+                        if (parsedEta.isEmpty() && clean.matches(Regex("""^\s*\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?\s*$"""))) {
+                            parsedEta = clean
+                        }
+                        if (parsedRemainingDistance.isEmpty() && clean.matches(Regex("""^\s*\d+(?:\.\d+)?\s*(?:mi|km|miles|meters)\s*$"""))) {
+                            parsedRemainingDistance = clean
+                        }
+                        if (parsedRemainingTime.isEmpty() && clean.matches(Regex("""^\s*\d+(?:\.\d+)?\s*(?:min|mins|hr|hrs|h)\s*$"""))) {
+                            parsedRemainingTime = clean
+                        }
+                    }
+
+                    if (parsedEta.isEmpty()) {
+                        parsedEta = eta
+                    }
+
+                    // 3. Distance to next maneuver (RemoteViews / text first)
+                    var parsedDistanceRemaining = ""
+                    val distanceRegex = Regex("""(?i)^\s*(?:In\s+)?\d+(?:\.\d+)?\s*(?:ft|mi|m|km|feet|miles|meters|yd|yds|yard|yards|feet)\s*$""")
+                    if (text.trim().matches(distanceRegex)) {
+                        parsedDistanceRemaining = text.trim()
+                    } else {
+                        // Scan remote views text
+                        for (candidate in remoteViewsTexts) {
+                            val clean = candidate.trim()
+                            if (clean.matches(distanceRegex)) {
+                                parsedDistanceRemaining = clean
+                                break
+                            }
+                        }
+                    }
+                    if (parsedDistanceRemaining.isEmpty()) {
+                        // Fallback if none matched but title/text is short
+                        val cleanText = text.trim()
+                        if (cleanText.length <= 10 && cleanText.any { it.isDigit() }) {
+                            parsedDistanceRemaining = cleanText
+                        }
+                    }
+
+                    // 4. Destination name extraction (look for "to [Destination]")
+                    var parsedDestination = ""
+                    val destinationRegex = Regex("""(?i)^\s*to\s+(?!stay\b|keep\b|left\b|right\b|continue\b|turn\b)(.+)""")
+                    for (candidate in allCandidateTexts) {
+                        val match = destinationRegex.find(candidate)
+                        if (match != null) {
+                            parsedDestination = match.groupValues[1].trim()
+                            break
+                        }
+                    }
+                    if (parsedDestination.isEmpty()) {
+                        // Scan extras keys for destination
+                        try {
+                            for (key in extras.keySet()) {
+                                if (key.lowercase().contains("destination")) {
+                                    val value = extras.get(key)?.toString()
+                                    if (!value.isNullOrEmpty()) {
+                                        parsedDestination = value
+                                        break
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // 5. Road name parsing (using existing keyword logic)
+                    var parsedRoadName = ""
+                    val lowerTitle = title.lowercase()
+                    if (lowerTitle.contains("onto ")) {
+                        val index = lowerTitle.indexOf("onto ") + 5
+                        parsedRoadName = title.substring(index).trim()
+                    } else if (lowerTitle.contains("on ")) {
+                        val index = lowerTitle.indexOf("on ") + 3
+                        parsedRoadName = title.substring(index).trim()
+                    } else if (lowerTitle.contains("toward ")) {
+                        val index = lowerTitle.indexOf("toward ") + 7
+                        parsedRoadName = title.substring(index).trim()
+                    } else {
+                        parsedRoadName = title
+                    }
+
                     OverlayStateManager.navigationState.value = NavigationState(
                         maneuverInstruction = title,
-                        distanceRemaining = text,
-                        eta = eta,
+                        distanceRemaining = parsedDistanceRemaining,
+                        eta = parsedEta,
+                        remainingDistance = parsedRemainingDistance,
+                        remainingTime = parsedRemainingTime,
+                        roadName = parsedRoadName,
+                        destination = parsedDestination,
                         maneuverIcon = drawable,
                         maneuverType = maneuverType,
                         appName = appLabel
@@ -1022,5 +1131,94 @@ class NovaNotificationListener : NotificationListenerService() {
                              text.contains("stop recording")
                              
         return matchesPkg && matchesKeywords
+    }
+
+    private fun extractRemoteViewsTexts(notification: Notification): List<String> {
+        val texts = mutableListOf<String>()
+        val viewsList = listOfNotNull(notification.contentView, notification.bigContentView, notification.headsUpContentView)
+        for (views in viewsList) {
+            try {
+                val actionsField = views.javaClass.getDeclaredField("mActions")
+                actionsField.isAccessible = true
+                val actions = actionsField.get(views) as? List<*> ?: continue
+                for (action in actions) {
+                    if (action == null) continue
+                    
+                    var clazz: Class<*>? = action.javaClass
+                    var methodName: String? = null
+                    var value: Any? = null
+                    
+                    while (clazz != null && clazz != Any::class.java) {
+                        for (field in clazz.declaredFields) {
+                            try {
+                                field.isAccessible = true
+                                if (field.name == "methodName") {
+                                    methodName = field.get(action) as? String
+                                } else if (field.name == "value") {
+                                    value = field.get(action)
+                                }
+                            } catch (e: Exception) {
+                                // ignore
+                            }
+                        }
+                        clazz = clazz.superclass
+                    }
+                    
+                    if (methodName == "setText" && value is CharSequence) {
+                        val str = value.toString().trim()
+                        if (str.isNotEmpty()) {
+                            texts.add(str)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        return texts
+    }
+
+    private fun parseTripMetadata(str: String): Triple<String, String, String>? {
+        val clean = str.trim()
+        if (!clean.contains("min") && !clean.contains("hr") && !clean.contains("h")) return null
+        
+        var eta = ""
+        var dist = ""
+        var time = ""
+        
+        // Try splitting by bullet, dash, or dot/middle dot
+        val parts = clean.split(Regex("[•\\-\u00B7]")).map { it.trim() }
+        if (parts.size >= 2) {
+            for (part in parts) {
+                if (part.matches(Regex(".*\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?\\b.*"))) {
+                    eta = part
+                } else if (part.contains("(")) {
+                    val open = part.indexOf("(")
+                    val close = part.indexOf(")")
+                    if (open != -1 && close != -1 && close > open) {
+                        time = part.substring(0, open).trim()
+                        dist = part.substring(open + 1, close).trim()
+                    }
+                } else if (part.contains("mi") || part.contains("km") || part.contains("m ")) {
+                    dist = part
+                } else if (part.contains("min") || part.contains("hr") || part.contains("h ")) {
+                    time = part
+                }
+            }
+        } else {
+            if (clean.contains("(")) {
+                val open = clean.indexOf("(")
+                val close = clean.indexOf(")")
+                if (open != -1 && close != -1 && close > open) {
+                    time = clean.substring(0, open).trim()
+                    dist = clean.substring(open + 1, close).trim()
+                }
+            }
+        }
+        
+        if (eta.isNotEmpty() || dist.isNotEmpty() || time.isNotEmpty()) {
+            return Triple(eta, dist, time)
+        }
+        return null
     }
 }

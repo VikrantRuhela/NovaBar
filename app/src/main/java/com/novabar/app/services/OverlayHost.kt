@@ -169,7 +169,7 @@ class OverlayHost(private val context: Context) {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val blurRad = settings.blurRadius
+                val blurRad = 25
                 if (blurRad > 0) {
                     blurBehindRadius = (blurRad * density).toInt()
                     flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND

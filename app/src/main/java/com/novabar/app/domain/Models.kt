@@ -68,6 +68,10 @@ data class NavigationState(
     val maneuverInstruction: String = "",
     val distanceRemaining: String = "",
     val eta: String = "",
+    val remainingDistance: String = "",
+    val remainingTime: String = "",
+    val roadName: String = "",
+    val destination: String = "",
     val maneuverIcon: Drawable? = null,
     val maneuverType: ManeuverType = ManeuverType.UNKNOWN,
     val appName: String = ""

@@ -118,15 +118,7 @@ fun DrawableImage(
     }
 }
 
-@Composable
-fun getTextSizeOffset(size: String): Float {
-    return when (size) {
-        "Small" -> -2f
-        "Large" -> 2f
-        "Extra Large" -> 4f
-        else -> 0f
-    }
-}
+
 
 fun formatSystemTime(timeFormat: String, showSeconds: Boolean): String {
     val cal = java.util.Calendar.getInstance()
@@ -362,7 +354,7 @@ fun NovaBarUi() {
         }
     }
 
-    val textSizeOffset = getTextSizeOffset(settings.textSize)
+    val textSizeOffset = settings.pillTextSize
 
     // Palette Color Extraction glass tint (Asynchronous)
     var extractedColor by remember { mutableStateOf<Color?>(null) }
@@ -718,6 +710,7 @@ fun NovaBarUi() {
                                     visualizerSensitivity = settings.visualizerSensitivity,
                                     progressVisibility = settings.progressVisibility,
                                     splitSegment = segment,
+                                    textSizeOffset = textSizeOffset,
                                     onSeekTo = { posMs ->
                                         com.novabar.app.services.NovaNotificationListener.seekTo(posMs)
                                     },
@@ -2074,6 +2067,20 @@ fun formatStopwatch(ms: Long, showSeconds: Boolean): String {
     }
 }
 
+private fun cleanDistanceText(input: String): String {
+    val clean = input.trim()
+    val distanceRegex = Regex("""(?i)(?:\bin\s+)?(\d+(?:\.\d+)?\s*(?:ft|mi|m|km|feet|miles|meters|yd|yds|yard|yards))""")
+    val match = distanceRegex.find(clean)
+    if (match != null) {
+        return match.groupValues[1].trim()
+    }
+    // If it only contains numbers, spaces, and dots/commas (and optional units), keep it
+    if (clean.matches(Regex("""(?i)^[0-9\s.,]+(ft|mi|m|km|feet|miles|meters|yd|yds|yard|yards)?$"""))) {
+        return clean
+    }
+    return ""
+}
+
 // --- NAVIGATION VIEW ---
 @Composable
 fun NavigationView(
@@ -2115,8 +2122,9 @@ fun NavigationView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
+                val cleanedDistance = cleanDistanceText(state.distanceRemaining)
                 Text(
-                    text = state.distanceRemaining.ifEmpty { "Nav" },
+                    text = cleanedDistance.ifEmpty { "Nav" },
                     color = color,
                     fontSize = (if (currentState == NowBarState.MINIMIZED) 11f else 11f + sizeOffset).sp,
                     fontWeight = if (currentState == NowBarState.MINIMIZED) FontWeight.Bold else FontWeight.Medium,
@@ -2150,14 +2158,17 @@ fun NavigationView(
                         modifier = Modifier.size(14.dp)
                     )
                 }
-                Text(
-                    text = state.distanceRemaining.ifEmpty { "Nav" },
-                    color = color,
-                    fontSize = (11f + sizeOffset).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                val cleanedDistance = cleanDistanceText(state.distanceRemaining)
+                if (cleanedDistance.isNotEmpty()) {
+                    Text(
+                        text = cleanedDistance,
+                        color = color,
+                        fontSize = (11f + sizeOffset).sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         NowBarState.COMPACT -> {
@@ -2181,48 +2192,142 @@ fun NavigationView(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = state.distanceRemaining.ifEmpty { "Nav" },
-                    color = color,
-                    fontSize = (13f + sizeOffset).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                val cleanedDistance = cleanDistanceText(state.distanceRemaining)
+                if (cleanedDistance.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = cleanedDistance,
+                        color = color,
+                        fontSize = (13f + sizeOffset).sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         NowBarState.EXPANDED -> {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp)
+                    .padding(16.dp)
                     .graphicsLayer { alpha = contentAlpha },
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.SpaceBetween,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (state.maneuverIcon != null) {
-                    DrawableImage(
-                        drawable = state.maneuverIcon,
-                        tintColor = Color(0xFF2196F3),
-                        modifier = Modifier.size(32.dp)
-                    )
-                } else {
-                    ManeuverIcon(
-                        type = state.maneuverType,
-                        color = Color(0xFF2196F3),
-                        modifier = Modifier.size(32.dp)
+                // Primary: Maneuver Icon & Distance to next maneuver
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (state.maneuverIcon != null) {
+                            DrawableImage(
+                                drawable = state.maneuverIcon,
+                                tintColor = Color(0xFF2196F3),
+                                modifier = Modifier.size(36.dp)
+                            )
+                        } else {
+                            ManeuverIcon(
+                                type = state.maneuverType,
+                                color = Color(0xFF2196F3),
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+                    Column(
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = state.distanceRemaining.ifEmpty { "Navigating" },
+                            color = color,
+                            fontSize = (22f + sizeOffset).sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = state.roadName.ifEmpty { state.maneuverInstruction.ifEmpty { "Follow route" } },
+                            color = color.copy(alpha = 0.7f),
+                            fontSize = (13f + sizeOffset).sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Divider line
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(color.copy(alpha = 0.15f))
+                )
+
+                // Secondary: ETA & Remaining Trip Distance
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "ETA",
+                            color = color.copy(alpha = 0.5f),
+                            fontSize = (10f + sizeOffset).sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = etaFormatted.ifEmpty { "--:--" },
+                            color = color,
+                            fontSize = (16f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "DISTANCE",
+                            color = color.copy(alpha = 0.5f),
+                            fontSize = (10f + sizeOffset).sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = state.remainingDistance.ifEmpty { "-- mi" },
+                            color = color,
+                            fontSize = (16f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Supporting: Destination Name
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(color.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = if (state.destination.isNotEmpty()) "to: ${state.destination}" else "Google Maps Active Route",
+                        color = color.copy(alpha = 0.8f),
+                        fontSize = (11f + sizeOffset).sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = state.distanceRemaining.ifEmpty { "Nav" },
-                    color = color,
-                    fontSize = (15f + sizeOffset).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
@@ -2474,6 +2579,7 @@ fun MediaView(
     contentAlpha: Float = 1f,
     controlsAlpha: Float = 1f,
     controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
+    textSizeOffset: Float = 0f,
     splitSegment: SplitSegment? = null
 ) {
     if (splitSegment != null) {
@@ -2552,7 +2658,7 @@ fun MediaView(
                     Text(
                         text = state.title.ifEmpty { "Not Playing" },
                         color = color,
-                        fontSize = 12.sp,
+                        fontSize = (12f + textSizeOffset).sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -2684,7 +2790,8 @@ fun MediaView(
                     controlsAlpha = controlsAlpha,
                     controlsOffsetY = controlsOffsetY,
                     songId = state.title + "_" + state.artist,
-                    isPlaying = state.isPlaying
+                    isPlaying = state.isPlaying,
+                    textSizeOffset = textSizeOffset
                 )
 
                 MediaControlsSection(
@@ -2739,13 +2846,14 @@ fun MediaMetadataSection(
     title: String,
     artist: String,
     color: Color,
+    textSizeOffset: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
         Text(
             text = title,
             color = color,
-            fontSize = 13.sp,
+            fontSize = (13f + textSizeOffset).sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -2753,7 +2861,7 @@ fun MediaMetadataSection(
         Text(
             text = artist.ifEmpty { "Unknown Artist" },
             color = color.copy(alpha = 0.7f),
-            fontSize = 11.sp,
+            fontSize = (11f + textSizeOffset).sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -3101,7 +3209,8 @@ fun PlaybackSeekBar(
     controlsAlpha: Float = 1f,
     controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
     songId: String = "",
-    isPlaying: Boolean = false
+    isPlaying: Boolean = false,
+    textSizeOffset: Float = 0f
 ) {
     val currentPosition by playbackPositionStateFlow.collectAsState()
     var dragPosition by remember { mutableStateOf<Float?>(null) }
@@ -3132,7 +3241,7 @@ fun PlaybackSeekBar(
         Text(
             text = formatTime(displayPositionMs),
             color = color.copy(alpha = 0.6f),
-            fontSize = 10.sp
+            fontSize = (10f + textSizeOffset).sp
         )
         WavyProgressSlider(
             value = sliderProgress,
@@ -3156,7 +3265,7 @@ fun PlaybackSeekBar(
         Text(
             text = formatTime(duration),
             color = color.copy(alpha = 0.6f),
-            fontSize = 10.sp
+            fontSize = (10f + textSizeOffset).sp
         )
     }
 }

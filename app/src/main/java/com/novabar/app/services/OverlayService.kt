@@ -63,6 +63,7 @@ class OverlayService : Service() {
         settingsJob?.cancel()
         settingsJob = scope.launch {
             settingsRepository.settingsFlow.collectLatest { settings ->
+                OverlayStateManager.settingsFlow.value = settings
                 if (settings.isEnabled && settings.overlayEngine == OverlayEngine.APPLICATION) {
                     showOverlay(settings)
                 } else {
