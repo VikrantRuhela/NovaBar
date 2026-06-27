@@ -55,7 +55,9 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     fun setOpacity(opacity: Float) = viewModelScope.launch {
         repository.updateOpacity(opacity)
     }
-
+    fun setAnimationSpeed(speed: Float) = viewModelScope.launch {
+        repository.updateAnimationSpeed(speed)
+    }
     fun setMediaEnabled(enabled: Boolean) = viewModelScope.launch {
         repository.updateMediaEnabled(enabled)
     }

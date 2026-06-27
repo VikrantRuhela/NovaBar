@@ -20,6 +20,7 @@ data class NovaSettings(
     val positionY: Int = 12, // Legacy position Y
     val cornerRadius: Int = 24, // dp
     val opacity: Float = 0.85f,
+    val animationSpeedMultiplier: Float = 1.0f,
     val mediaControlsEnabled: Boolean = true,
     val timerEnabled: Boolean = true,
     val stopwatchEnabled: Boolean = true,
@@ -71,6 +72,7 @@ class SettingsRepository(private val context: Context) {
         private val POSITION_Y = intPreferencesKey("position_y")
         private val CORNER_RADIUS = intPreferencesKey("corner_radius")
         private val OPACITY = floatPreferencesKey("opacity")
+        private val ANIMATION_SPEED = floatPreferencesKey("animation_speed")
         private val MEDIA_ENABLED = booleanPreferencesKey("media_enabled")
         private val TIMER_ENABLED = booleanPreferencesKey("timer_enabled")
         private val STOPWATCH_ENABLED = booleanPreferencesKey("stopwatch_enabled")
@@ -121,6 +123,7 @@ class SettingsRepository(private val context: Context) {
             positionY = preferences[POSITION_Y] ?: 12,
             cornerRadius = preferences[CORNER_RADIUS] ?: 24,
             opacity = preferences[OPACITY] ?: 0.85f,
+            animationSpeedMultiplier = preferences[ANIMATION_SPEED] ?: 1.0f,
             mediaControlsEnabled = preferences[MEDIA_ENABLED] ?: true,
             timerEnabled = preferences[TIMER_ENABLED] ?: true,
             stopwatchEnabled = preferences[STOPWATCH_ENABLED] ?: true,
@@ -185,7 +188,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateOpacity(opacity: Float) {
         context.dataStore.edit { it[OPACITY] = opacity }
     }
-
+    suspend fun updateAnimationSpeed(speed: Float) {
+        context.dataStore.edit { it[ANIMATION_SPEED] = speed }
+    }
 
     suspend fun updateMediaEnabled(enabled: Boolean) {
         context.dataStore.edit { it[MEDIA_ENABLED] = enabled }
@@ -373,6 +378,7 @@ class SettingsRepository(private val context: Context) {
             preferences[POSITION_Y] = s.positionY
             preferences[CORNER_RADIUS] = s.cornerRadius
             preferences[OPACITY] = s.opacity
+            preferences[ANIMATION_SPEED] = s.animationSpeedMultiplier
             preferences[MEDIA_ENABLED] = s.mediaControlsEnabled
             preferences[TIMER_ENABLED] = s.timerEnabled
             preferences[STOPWATCH_ENABLED] = s.stopwatchEnabled

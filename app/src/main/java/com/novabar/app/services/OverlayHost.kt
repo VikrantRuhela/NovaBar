@@ -167,23 +167,6 @@ class OverlayHost(private val context: Context) {
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val blurRad = 25
-                if (blurRad > 0) {
-                    blurBehindRadius = (blurRad * density).toInt()
-                    flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-                    com.novabar.app.domain.DiagnosticsManager.blurEnabled.value = true
-                    com.novabar.app.domain.DiagnosticsManager.blurBackend.value = "WindowManager (FLAG_BLUR_BEHIND)"
-                } else {
-                    flags = flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
-                    com.novabar.app.domain.DiagnosticsManager.blurEnabled.value = false
-                    com.novabar.app.domain.DiagnosticsManager.blurBackend.value = "None"
-                }
-            } else {
-                com.novabar.app.domain.DiagnosticsManager.blurEnabled.value = false
-                com.novabar.app.domain.DiagnosticsManager.blurBackend.value = "Unsupported (< API 31)"
-            }
         }
 
         currentParams = layoutParams

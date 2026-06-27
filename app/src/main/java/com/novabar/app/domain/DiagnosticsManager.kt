@@ -12,8 +12,6 @@ object DiagnosticsManager {
     val touchableState = MutableStateFlow("Unknown")
     val currentActivity = MutableStateFlow("Unknown")
     val currentPresentationState = MutableStateFlow("Unknown")
-    val blurEnabled = MutableStateFlow(false)
-    val blurBackend = MutableStateFlow("None")
     val windowWidth = MutableStateFlow(0)
     val windowHeight = MutableStateFlow(0)
     val touchEventsReceived = MutableStateFlow(0L)
