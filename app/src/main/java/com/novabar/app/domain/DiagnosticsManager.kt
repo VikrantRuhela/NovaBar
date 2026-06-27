@@ -15,6 +15,8 @@ object DiagnosticsManager {
     val windowWidth = MutableStateFlow(0)
     val windowHeight = MutableStateFlow(0)
     val touchEventsReceived = MutableStateFlow(0L)
+    val blurEnabled = MutableStateFlow(false)
+    val blurBackend = MutableStateFlow("None")
 
     // MEDIA SECTION
     val mediaSessionActive = MutableStateFlow(false)
