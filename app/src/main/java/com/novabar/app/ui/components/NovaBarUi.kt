@@ -2783,19 +2783,21 @@ fun NavigationView(
                             if (state.destination.isNotEmpty() && !contextTitle.contains(state.destination, ignoreCase = true)) {
                                 "to: ${state.destination}"
                             } else {
-                                "Follow route"
+                                ""
                             }
                         } else {
-                            state.roadName.ifEmpty { state.maneuverInstruction.ifEmpty { "Follow route" } }
+                            state.roadName.ifEmpty { state.maneuverInstruction }
                         }
-                        Text(
-                            text = subtitleText,
-                            color = color.copy(alpha = 0.7f),
-                            fontSize = (13f + sizeOffset).sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (subtitleText.isNotEmpty()) {
+                            Text(
+                                text = subtitleText,
+                                color = color.copy(alpha = 0.7f),
+                                fontSize = (13f + sizeOffset).sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 

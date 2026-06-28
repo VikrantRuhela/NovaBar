@@ -2429,9 +2429,6 @@ fun DiagnosticsDashboard(
     }
 }
 
-<<<<<<< HEAD
-
-=======
 @Composable
 fun AboutScreen(settings: NovaSettings) {
     val context = LocalContext.current
@@ -2542,6 +2539,3 @@ fun AboutScreen(settings: NovaSettings) {
         }
     }
 }
-
-
->>>>>>> f0e335e (Finalize V2.0 commit without large file)
