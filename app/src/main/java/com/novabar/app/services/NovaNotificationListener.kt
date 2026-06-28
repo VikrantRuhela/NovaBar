@@ -186,6 +186,14 @@ class NovaNotificationListener : NotificationListenerService() {
             triggerNotificationAction(activeStopwatchSbn, listOf("lap", "split"), "STOPWATCH_LAP")
         }
 
+        fun resetStopwatch() {
+            val success = triggerNotificationAction(activeStopwatchSbn, listOf("reset", "restart", "delete", "clear"), "STOPWATCH_RESET")
+            if (success) {
+                activeStopwatchSbn = null
+                OverlayStateManager.setStopwatchState(null)
+            }
+        }
+
         private fun triggerNotificationAction(sbn: StatusBarNotification?, keywords: List<String>, buttonName: String): Boolean {
             Log.d("NovaBar", "BUTTON_CLICKED: button=$buttonName")
             if (sbn == null) {
@@ -807,11 +815,22 @@ class NovaNotificationListener : NotificationListenerService() {
                     Log.i("NovaBar-Navigation", logMsg)
                     com.novabar.app.utils.DeveloperLogger.log(this@NovaNotificationListener, "NavigationCompat", logMsg)
 
+                    // Resolve true instruction and trip info texts
+                    val isTitleTripInfo = parseTripMetadata(title) != null || 
+                            title.contains("•") || 
+                            ((title.contains("min") || title.contains("hr") || title.contains("mi") || title.contains("km") || title.contains("m ")) && title.any { it.isDigit() })
+                    
+                    val instructionText = if (isTitleTripInfo) text else title
+                    val tripInfoText = if (isTitleTripInfo) title else text
+
                     // 1. Gather all candidate text sources (subtext first, then RemoteViews)
                     val remoteViewsTexts = extractRemoteViewsTexts(notification)
                     val allCandidateTexts = mutableListOf<String>()
                     if (subtext.isNotEmpty()) {
                         allCandidateTexts.add(subtext)
+                    }
+                    if (tripInfoText.isNotEmpty()) {
+                        allCandidateTexts.add(tripInfoText)
                     }
                     allCandidateTexts.addAll(remoteViewsTexts)
 
@@ -848,27 +867,30 @@ class NovaNotificationListener : NotificationListenerService() {
                         parsedEta = eta
                     }
 
-                    // 3. Distance to next maneuver (RemoteViews / text first)
+                    // 3. Distance to next maneuver (LiveBridge regex implementation, filtering out trip info)
                     var parsedDistanceRemaining = ""
-                    val distanceRegex = Regex("""(?i)^\s*(?:In\s+)?\d+(?:\.\d+)?\s*(?:ft|mi|m|km|feet|miles|meters|yd|yds|yard|yards|feet)\s*$""")
-                    if (text.trim().matches(distanceRegex)) {
-                        parsedDistanceRemaining = text.trim()
-                    } else {
-                        // Scan remote views text
-                        for (candidate in remoteViewsTexts) {
-                            val clean = candidate.trim()
-                            if (clean.matches(distanceRegex)) {
-                                parsedDistanceRemaining = clean
-                                break
+                    val liveBridgeDistancePattern = Regex("""(?i)(?<!\d)\d{1,4}(?:[\s.,]\d{1,2})?\s*(?:км|km|м|m|mi|ft|миль|фут|公里|公尺|米|yards|yd|yds|feet)\b""")
+                    
+                    // Combine non-trip-info candidates to search for next maneuver distance
+                    val combinedText = buildString {
+                        if (subtext.isNotEmpty() && parseTripMetadata(subtext) == null && !subtext.contains("•")) {
+                            append(subtext).append(" ")
+                        }
+                        if (instructionText.isNotEmpty() && parseTripMetadata(instructionText) == null && !instructionText.contains("•")) {
+                            append(instructionText).append(" ")
+                        }
+                        for (rvText in remoteViewsTexts) {
+                            if (rvText.isNotEmpty() && parseTripMetadata(rvText) == null && !rvText.contains("•")) {
+                                append(rvText).append(" ")
                             }
                         }
                     }
-                    if (parsedDistanceRemaining.isEmpty()) {
-                        // Fallback if none matched but title/text is short
-                        val cleanText = text.trim()
-                        if (cleanText.length <= 10 && cleanText.any { it.isDigit() }) {
-                            parsedDistanceRemaining = cleanText
-                        }
+                    
+                    val distanceMatch = liveBridgeDistancePattern.find(combinedText)
+                    if (distanceMatch != null) {
+                        parsedDistanceRemaining = distanceMatch.value
+                            .replace(Regex("\\s+"), " ")
+                            .trim()
                     }
 
                     // 4. Destination name extraction (look for "to [Destination]")
@@ -898,22 +920,22 @@ class NovaNotificationListener : NotificationListenerService() {
 
                     // 5. Road name parsing (using existing keyword logic)
                     var parsedRoadName = ""
-                    val lowerTitle = title.lowercase()
-                    if (lowerTitle.contains("onto ")) {
-                        val index = lowerTitle.indexOf("onto ") + 5
-                        parsedRoadName = title.substring(index).trim()
-                    } else if (lowerTitle.contains("on ")) {
-                        val index = lowerTitle.indexOf("on ") + 3
-                        parsedRoadName = title.substring(index).trim()
-                    } else if (lowerTitle.contains("toward ")) {
-                        val index = lowerTitle.indexOf("toward ") + 7
-                        parsedRoadName = title.substring(index).trim()
+                    val lowerInstruction = instructionText.lowercase()
+                    if (lowerInstruction.contains("onto ")) {
+                        val index = lowerInstruction.indexOf("onto ") + 5
+                        parsedRoadName = instructionText.substring(index).trim()
+                    } else if (lowerInstruction.contains("on ")) {
+                        val index = lowerInstruction.indexOf("on ") + 3
+                        parsedRoadName = instructionText.substring(index).trim()
+                    } else if (lowerInstruction.contains("toward ")) {
+                        val index = lowerInstruction.indexOf("toward ") + 7
+                        parsedRoadName = instructionText.substring(index).trim()
                     } else {
-                        parsedRoadName = title
+                        parsedRoadName = instructionText
                     }
 
                     OverlayStateManager.navigationState.value = NavigationState(
-                        maneuverInstruction = title,
+                        maneuverInstruction = instructionText,
                         distanceRemaining = parsedDistanceRemaining,
                         eta = parsedEta,
                         remainingDistance = parsedRemainingDistance,

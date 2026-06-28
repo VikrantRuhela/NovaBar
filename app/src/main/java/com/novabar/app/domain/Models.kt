@@ -35,6 +35,7 @@ data class StopwatchState(
     val hasPause: Boolean = false,
     val hasResume: Boolean = false,
     val hasLap: Boolean = false,
+    val hasReset: Boolean = false,
     val startElapsedRealtime: Long = 0L,
     val showSeconds: Boolean = false
 )

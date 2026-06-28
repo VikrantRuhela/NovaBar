@@ -134,14 +134,25 @@ object GoogleClockProvider : ClockProvider {
         val hasStopwatchText = remoteViewsTexts.any { it.lowercase().contains("stopwatch") }
         val hasTimerText = remoteViewsTexts.any { it.lowercase().contains("timer") }
 
-        val isStopwatch = title.lowercase().contains("stopwatch") || 
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification.channelId?.lowercase() ?: ""
+        } else {
+            ""
+        }
+        val isStopwatchByChannel = channelId.contains("stopwatch")
+        val isTimerByChannel = channelId.contains("timer")
+
+        val isStopwatch = isStopwatchByChannel ||
+                title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
                 hasStopwatchText ||
                 hasLap ||
-                (extractedData.baseTimeMs != null && extractedData.isCountDown == false) ||
-                (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis())
+                (extractedData.baseTimeMs != null && extractedData.isCountDown != true) ||
+                (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis()) ||
+                (actionTitles.any { it.contains("reset") || it.contains("clear") } && (hasPause || hasResume) && !actionTitles.any { it.contains("+1") || it.contains("add") })
                 
         val isTimer = !isStopwatch && (
+            isTimerByChannel ||
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
             hasTimerText ||
@@ -221,6 +232,7 @@ object GoogleClockProvider : ClockProvider {
                 hasPause = hasPause,
                 hasResume = hasResume,
                 hasLap = hasLap,
+                hasReset = hasReset,
                 startElapsedRealtime = startElapsedRealtime,
                 showSeconds = settings.showSeconds
             ))
@@ -399,12 +411,23 @@ object XiaomiClockProvider : ClockProvider {
         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
 
-        val isStopwatch = title.lowercase().contains("stopwatch") || 
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification.channelId?.lowercase() ?: ""
+        } else {
+            ""
+        }
+        val isStopwatchByChannel = channelId.contains("stopwatch")
+        val isTimerByChannel = channelId.contains("timer")
+
+        val isStopwatch = isStopwatchByChannel ||
+                title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
                 hasLap ||
-                (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis())
+                (showChronometer && !isCountDown && whenTime > 0L && whenTime < System.currentTimeMillis()) ||
+                (actionTitles.any { it.contains("reset") || it.contains("clear") } && (hasPause || hasResume) && !actionTitles.any { it.contains("+1") || it.contains("add") })
                 
         val isTimer = !isStopwatch && (
+            isTimerByChannel ||
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
             isCountDown ||
@@ -438,6 +461,7 @@ object XiaomiClockProvider : ClockProvider {
                 hasPause = hasPause,
                 hasResume = hasResume,
                 hasLap = hasLap,
+                hasReset = hasReset,
                 startElapsedRealtime = startElapsedRealtime,
                 showSeconds = settings.showSeconds
             ))
@@ -560,12 +584,23 @@ object SamsungClockProvider : ClockProvider {
         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
         
-        val isStopwatch = title.lowercase().contains("stopwatch") || 
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification.channelId?.lowercase() ?: ""
+        } else {
+            ""
+        }
+        val isStopwatchByChannel = channelId.contains("stopwatch")
+        val isTimerByChannel = channelId.contains("timer")
+
+        val isStopwatch = isStopwatchByChannel ||
+                title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
                 hasLap ||
-                (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1"))
+                (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1")) ||
+                (actionTitles.any { it.contains("reset") || it.contains("clear") } && (hasPause || hasResume) && !actionTitles.any { it.contains("+1") || it.contains("add") })
                 
         val isTimer = !isStopwatch && (
+            isTimerByChannel ||
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
             isCountDown ||
@@ -594,6 +629,7 @@ object SamsungClockProvider : ClockProvider {
                 hasPause = hasPause,
                 hasResume = hasResume,
                 hasLap = hasLap,
+                hasReset = hasReset,
                 startElapsedRealtime = startElapsedRealtime,
                 showSeconds = settings.showSeconds
             ))
@@ -682,12 +718,23 @@ object DefaultClockProvider : ClockProvider {
         val hasResume = actionTitles.any { it.contains("resume") || it.contains("continue") || it.contains("start") || it.contains("play") }
         val hasReset = actionTitles.any { it.contains("reset") || it.contains("restart") || it.contains("delete") || it.contains("dismiss") || it.contains("cancel") || it.contains("clear") }
         
-        val isStopwatch = title.lowercase().contains("stopwatch") || 
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification.channelId?.lowercase() ?: ""
+        } else {
+            ""
+        }
+        val isStopwatchByChannel = channelId.contains("stopwatch")
+        val isTimerByChannel = channelId.contains("timer")
+
+        val isStopwatch = isStopwatchByChannel ||
+                title.lowercase().contains("stopwatch") || 
                 text.lowercase().contains("stopwatch") || 
                 hasLap ||
-                (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1"))
+                (actionTitles.contains("pause") && actionTitles.contains("reset") && !actionTitles.contains("+1")) ||
+                (actionTitles.any { it.contains("reset") || it.contains("clear") } && (hasPause || hasResume) && !actionTitles.any { it.contains("+1") || it.contains("add") })
                 
         val isTimer = !isStopwatch && (
+            isTimerByChannel ||
             title.lowercase().contains("timer") || 
             text.lowercase().contains("timer") || 
             isCountDown ||
@@ -715,6 +762,7 @@ object DefaultClockProvider : ClockProvider {
                 hasPause = hasPause,
                 hasResume = hasResume,
                 hasLap = hasLap,
+                hasReset = hasReset,
                 startElapsedRealtime = startElapsedRealtime,
                 showSeconds = settings.showSeconds
             ))
@@ -794,7 +842,331 @@ object ClockCompatibilityLayer {
 
     fun parse(sbn: StatusBarNotification, settings: NovaSettings, context: Context): ParsedClockState {
         val packageName = sbn.packageName
+        
+        // 1. Pre-filter and explicitly reject progress/download notifications
+        if (isDownloadOrRejected(sbn, context)) {
+            Log.i(TAG, "Explicitly rejecting notification from $packageName as it is a download/progress notification.")
+            return ParsedClockState.None
+        }
+        
         val provider = providers[packageName] ?: LoggingClockProvider("FallbackClock", DefaultClockProvider)
-        return provider.parse(sbn, settings, context)
+        val result = provider.parse(sbn, settings, context)
+
+        if (result is ParsedClockState.Stopwatch) {
+            val score = calculateStopwatchConfidence(sbn, context)
+            if (score < 60) {
+                Log.i(TAG, "Rejecting stopwatch classification for package $packageName because confidence score ($score) is below threshold.")
+                return ParsedClockState.None
+            }
+        } else if (result is ParsedClockState.Timer) {
+            val score = calculateTimerConfidence(sbn, context)
+            if (score < 60) {
+                Log.i(TAG, "Rejecting timer classification for package $packageName because confidence score ($score) is below threshold.")
+                return ParsedClockState.None
+            }
+        }
+        return result
+    }
+
+    private fun isDownloadOrRejected(sbn: StatusBarNotification, context: Context): Boolean {
+        val packageName = sbn.packageName.lowercase()
+        val notification = sbn.notification
+        val extras = notification.extras ?: android.os.Bundle()
+        val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
+        val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
+        val category = notification.category ?: ""
+        
+        // Exemption list for known clock applications
+        val knownClockPackages = setOf(
+            "com.google.android.deskclock",
+            "com.sec.android.app.clockpackage",
+            "com.android.deskclock",
+            "com.oneplus.deskclock",
+            "com.coloros.alarmclock",
+            "com.android.BBKClock",
+            "com.nothing.deskclock",
+            "com.motorola.deskclock",
+            "com.lenovo.deskclock",
+            "com.sony.android.deskclock",
+            "com.asus.calculator"
+        )
+        if (knownClockPackages.contains(packageName) || packageName.contains("deskclock")) {
+            return false
+        }
+        
+        val isRejectedCategory = category == android.app.Notification.CATEGORY_PROGRESS ||
+                category == android.app.Notification.CATEGORY_SERVICE ||
+                category == android.app.Notification.CATEGORY_STATUS
+                
+        val isDownloadPackage = packageName.contains("download") ||
+                packageName.contains("chrome") ||
+                packageName.contains("firefox") ||
+                packageName.contains("browser") ||
+                packageName.contains("opera") ||
+                packageName.contains("edge") ||
+                packageName.contains("updater") ||
+                packageName.contains("installer") ||
+                packageName.contains("transfer") ||
+                packageName.contains("sync") ||
+                packageName.contains("backup") ||
+                packageName.contains("vending") || // Play Store
+                packageName == "android"
+                
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification.channelId?.lowercase() ?: ""
+        } else {
+            ""
+        }
+        val isDownloadChannel = channelId.contains("download") ||
+                channelId.contains("transfer") ||
+                channelId.contains("progress") ||
+                channelId.contains("sync") ||
+                channelId.contains("backup")
+                
+        val containsDownloadKeywords = title.contains("download") || title.contains("install") || title.contains("update") ||
+                title.contains("transfer") || title.contains("sync") || title.contains("backup") ||
+                title.contains("uploading") || title.contains("downloading") ||
+                text.contains("download") || text.contains("install") || text.contains("update") ||
+                text.contains("transfer") || text.contains("sync") || text.contains("backup") ||
+                text.contains("uploading") || text.contains("downloading")
+                
+        val hasProgress = extras.containsKey(android.app.Notification.EXTRA_PROGRESS) ||
+                extras.getInt(android.app.Notification.EXTRA_PROGRESS_MAX, 0) > 0
+                
+        return isRejectedCategory || isDownloadPackage || isDownloadChannel || containsDownloadKeywords || hasProgress
+    }
+
+    private fun calculateTimerConfidence(sbn: StatusBarNotification, context: Context): Int {
+        var score = 0
+        val packageName = sbn.packageName
+        val notification = sbn.notification
+        val extras = notification.extras ?: android.os.Bundle()
+        val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
+        val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
+        
+        val actions = notification.actions ?: emptyArray()
+        val actionTitles = actions.map { it.title.toString().lowercase() }
+
+        val knownClockPackages = setOf(
+            "com.google.android.deskclock",
+            "com.sec.android.app.clockpackage",
+            "com.android.deskclock",
+            "com.oneplus.deskclock",
+            "com.coloros.alarmclock",
+            "com.android.BBKClock",
+            "com.nothing.deskclock",
+            "com.motorola.deskclock",
+            "com.lenovo.deskclock",
+            "com.sony.android.deskclock",
+            "com.asus.calculator"
+        )
+        val isKnownClock = knownClockPackages.contains(packageName)
+        if (isKnownClock) {
+            return 100
+        }
+        val isClockLikePackage = packageName.contains("clock", ignoreCase = true) ||
+                packageName.contains("deskclock", ignoreCase = true) ||
+                packageName.contains("alarm", ignoreCase = true)
+        
+        if (isClockLikePackage) {
+            score += 50
+        }
+
+        val timerActions = setOf("pause", "resume", "reset", "stop", "start", "+1", "add 1", "add", "dismiss", "cancel")
+        val hasTimerAction = actionTitles.any { titleStr ->
+            timerActions.any { t -> titleStr.contains(t) }
+        }
+        if (hasTimerAction) {
+            score += 25
+        }
+
+        val hasTimerKeywords = title.contains("timer") || text.contains("timer") ||
+                title.contains("min") || text.contains("min") ||
+                title.contains("sec") || text.contains("sec") ||
+                title.contains("hour") || text.contains("hour") ||
+                title.contains("hr") || text.contains("hr") ||
+                title.contains(":") || text.contains(":")
+        if (hasTimerKeywords) {
+            score += 15
+        }
+
+        val showChronometer = extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER, false)
+        val isCountDown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            extras.getBoolean("android.chronometerCountDown", false)
+        } else {
+            false
+        }
+        if (showChronometer && isCountDown) {
+            score += 10
+        }
+
+        Log.i(TAG, "Timer confidence score for package $packageName: $score")
+        return score
+    }
+
+    private fun calculateStopwatchConfidence(sbn: StatusBarNotification, context: Context): Int {
+        var score = 0
+        val packageName = sbn.packageName
+        val notification = sbn.notification
+        val extras = notification.extras ?: android.os.Bundle()
+        val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
+        val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
+        val category = notification.category ?: ""
+        
+        val actions = notification.actions ?: emptyArray()
+        val actionTitles = actions.map { it.title.toString().lowercase() }
+
+        // --- Stage 1: Package Validation (+50) ---
+        val knownClockPackages = setOf(
+            "com.google.android.deskclock",
+            "com.sec.android.app.clockpackage",
+            "com.android.deskclock",
+            "com.oneplus.deskclock",
+            "com.coloros.alarmclock",
+            "com.android.BBKClock",
+            "com.nothing.deskclock",
+            "com.motorola.deskclock",
+            "com.lenovo.deskclock",
+            "com.sony.android.deskclock",
+            "com.asus.calculator"
+        )
+        val isKnownClock = knownClockPackages.contains(packageName)
+        if (isKnownClock) {
+            return 100
+        }
+        val isClockLikePackage = packageName.contains("clock", ignoreCase = true) ||
+                packageName.contains("deskclock", ignoreCase = true) ||
+                packageName.contains("alarm", ignoreCase = true)
+        
+        if (isClockLikePackage) {
+            score += 50
+        }
+
+        // --- Stage 2: Notification Classification & Rejection ---
+        val isRejectedCategory = category == android.app.Notification.CATEGORY_PROGRESS ||
+                category == android.app.Notification.CATEGORY_SERVICE ||
+                category == android.app.Notification.CATEGORY_STATUS
+        
+        val isDownloadPackage = packageName.contains("download") ||
+                packageName.contains("chrome") ||
+                packageName.contains("firefox") ||
+                packageName.contains("browser") ||
+                packageName.contains("updater") ||
+                packageName.contains("installer") ||
+                packageName.contains("transfer") ||
+                packageName.contains("sync") ||
+                packageName.contains("backup") ||
+                packageName == "android"
+        
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification.channelId?.lowercase() ?: ""
+        } else {
+            ""
+        }
+        val isDownloadChannel = channelId.contains("download") ||
+                channelId.contains("transfer") ||
+                channelId.contains("progress") ||
+                channelId.contains("sync") ||
+                channelId.contains("backup")
+        
+        val containsDownloadKeywords = title.contains("download") || title.contains("install") || title.contains("update") ||
+                title.contains("transfer") || title.contains("sync") || title.contains("backup") ||
+                text.contains("download") || text.contains("install") || text.contains("update") ||
+                text.contains("transfer") || text.contains("sync") || text.contains("backup")
+
+        if (!isKnownClock && !isClockLikePackage && (isRejectedCategory || isDownloadPackage || isDownloadChannel || containsDownloadKeywords)) {
+            score -= 60
+        }
+
+        // --- Stage 3: Action Validation ---
+        val stopwatchActions = setOf("pause", "resume", "reset", "lap", "split", "stop", "start")
+        val hasStopwatchAction = actionTitles.any { titleStr ->
+            stopwatchActions.any { sw -> titleStr.contains(sw) }
+        }
+        
+        val downloadActions = setOf("cancel", "install", "open", "folder", "delete", "dismiss")
+        val hasDownloadAction = actionTitles.any { titleStr ->
+            downloadActions.any { dl -> titleStr.contains(dl) }
+        }
+
+        if (hasStopwatchAction && !hasDownloadAction) {
+            score += 25
+        }
+        if (hasDownloadAction) {
+            score -= 40
+        }
+
+        // --- Stage 4: RemoteViews / View Hierarchy Inspection ---
+        val remoteViewsTexts = extractRemoteViewsTexts(notification)
+        val hasStopwatchText = remoteViewsTexts.any { it.lowercase().contains("stopwatch") }
+        if (hasStopwatchText || title.contains("stopwatch") || text.contains("stopwatch")) {
+            score += 15
+        }
+
+        // --- Stage 5: Metadata Validation ---
+        val showChronometer = extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER, false)
+        val isCountDown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            extras.getBoolean("android.chronometerCountDown", false)
+        } else {
+            false
+        }
+        val whenTime = notification.`when`
+        val hasProgress = extras.containsKey(android.app.Notification.EXTRA_PROGRESS) ||
+                extras.getInt(android.app.Notification.EXTRA_PROGRESS_MAX, 0) > 0
+        
+        if (showChronometer && !isCountDown && whenTime > 0L && whenTime <= System.currentTimeMillis()) {
+            score += 10
+        }
+        if (hasProgress) {
+            score -= 50
+        }
+        
+        Log.i(TAG, "Stopwatch confidence score for package $packageName: $score")
+        return score
+    }
+
+    private fun extractRemoteViewsTexts(notification: android.app.Notification): List<String> {
+        val texts = mutableListOf<String>()
+        val viewsList = listOfNotNull(notification.contentView, notification.bigContentView, notification.headsUpContentView)
+        for (views in viewsList) {
+            try {
+                val actionsField = views.javaClass.getDeclaredField("mActions")
+                actionsField.isAccessible = true
+                val actions = actionsField.get(views) as? List<*> ?: continue
+                for (action in actions) {
+                    if (action == null) continue
+                    
+                    var clazz: Class<*>? = action.javaClass
+                    var methodName: String? = null
+                    var value: Any? = null
+                    
+                    while (clazz != null && clazz != Any::class.java) {
+                        for (field in clazz.declaredFields) {
+                            try {
+                                field.isAccessible = true
+                                if (field.name == "methodName") {
+                                    methodName = field.get(action) as? String
+                                } else if (field.name == "value") {
+                                    value = field.get(action)
+                                }
+                            } catch (e: Exception) {
+                                // ignore
+                            }
+                        }
+                        clazz = clazz.superclass
+                    }
+                    
+                    if (methodName == "setText" && value is CharSequence) {
+                        val str = value.toString().trim()
+                        if (str.isNotEmpty()) {
+                            texts.add(str)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        return texts
     }
 }

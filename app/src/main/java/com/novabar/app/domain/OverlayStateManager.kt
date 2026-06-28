@@ -50,6 +50,7 @@ object OverlayStateManager {
 
     // Global expanded state flow
     val isExpanded = MutableStateFlow(false)
+    val expandedActivityKey = MutableStateFlow<String?>(null)
     val windowMode = MutableStateFlow("Compact")
     val systemBarVisible = MutableStateFlow(true)
 
@@ -62,12 +63,14 @@ object OverlayStateManager {
     fun collapse() {
         Log.d("NovaBar", "COLLAPSE_REQUEST")
         isExpanded.value = false
+        expandedActivityKey.value = null
     }
 
     fun toggleExpanded() {
         if (isExpanded.value) {
             Log.d("NovaBar", "COLLAPSE_REQUEST")
             isExpanded.value = false
+            expandedActivityKey.value = null
         } else {
             Log.d("NovaBar", "EXPAND_REQUEST")
             windowMode.value = "Expanded"
@@ -82,7 +85,9 @@ object OverlayStateManager {
             chargingJob?.cancel()
             chargingJob = scope.launch {
                 delay(5000L) // Show for 5 seconds
-                isChargingActive.value = false
+                if (!isExpanded.value) {
+                    isChargingActive.value = false
+                }
             }
         } else {
             isChargingActive.value = false
@@ -96,7 +101,9 @@ object OverlayStateManager {
             notificationJob?.cancel()
             notificationJob = scope.launch {
                 delay(7000L) // Show for 7 seconds
-                isNotificationActive.value = false
+                if (!isExpanded.value) {
+                    isNotificationActive.value = false
+                }
             }
         } else {
             isNotificationActive.value = false
@@ -248,6 +255,16 @@ object OverlayStateManager {
             activeActivities.collect { currentList ->
                 val currentMedia = currentList.firstOrNull { it is OverlayState.Media } as? OverlayState.Media
                 val isMediaPlaying = currentMedia?.data?.isPlaying == true
+
+                if (isExpanded.value) {
+                    wasMediaPlaying = isMediaPlaying
+                    previousList = currentList
+                    val currentIndex = selectedActivityIndex.value
+                    if (currentIndex >= currentList.size) {
+                        selectedActivityIndex.value = (currentList.size - 1).coerceAtLeast(0)
+                    }
+                    return@collect
+                }
                 
                 val newlyAdded = currentList.firstOrNull { newItem ->
                     previousList.none { it::class.java == newItem::class.java }
@@ -297,6 +314,21 @@ object OverlayStateManager {
         scope.launch {
             activeState.collect { state ->
                 DiagnosticsManager.currentPresentationState.value = state::class.java.simpleName
+            }
+        }
+        
+        // 5-second automatic activity rotation loop for the compact activity pill only
+        scope.launch {
+            while (isActive) {
+                delay(5000L)
+                if (!isExpanded.value) {
+                    val list = activeActivities.value
+                    if (list.size > 1) {
+                        val nextIndex = (selectedActivityIndex.value + 1) % list.size
+                        selectedActivityIndex.value = nextIndex
+                        Log.d("OverlayStateManager", "Auto-rotating compact activity pill to index $nextIndex (${list[nextIndex]::class.java.simpleName})")
+                    }
+                }
             }
         }
     }

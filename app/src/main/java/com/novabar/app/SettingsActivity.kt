@@ -140,7 +140,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         TabItem("Appearance", NovaIcons.Appearance),
         TabItem("Activities", NovaIcons.Activities),
         TabItem("Settings", NovaIcons.Settings),
-        TabItem("Developer", NovaIcons.Developer)
+        TabItem("Developer", NovaIcons.Developer),
+        TabItem("About", NovaIcons.Info)
     )
 
     Scaffold(
@@ -192,6 +193,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         hasAccessibilityPermission = hasAccessibilityPermission.value,
                         hasOverlayPermission = hasOverlayPermission.value
                     )
+                    5 -> AboutScreen(settings = settings)
                 }
             }
         }
@@ -675,126 +677,6 @@ fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Dynamic Live Preview
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Live Studio Preview",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                // Simulated Phone Notch Area
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .background(Color.Black, RoundedCornerShape(12.dp))
-                        .padding(8.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    // Camera Notch Dot
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1A1A1A))
-                            .align(Alignment.TopCenter)
-                    )
-
-                    // Simulated Nova Bar capsule representing gravity and position
-                    val barWidthScale = settings.barWidthScale
-                    val barGravity = settings.barGravity
-                    val opacity = settings.opacity
-                    val cornerRadius = settings.cornerRadius
-                    val cutoutMode = settings.cameraCutoutMode
-                    val leftW = settings.leftSegmentWidthDp
-                    val rightW = settings.rightSegmentWidthDp
-
-                    if (!cutoutMode) {
-                        // Standard Capsule
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(barWidthScale * 0.7f)
-                                .height((26 + settings.barHeightPadding / 2).dp.coerceAtLeast(16.dp))
-                                .align(
-                                    when (barGravity) {
-                                        "Left" -> Alignment.TopStart
-                                        "Right" -> Alignment.TopEnd
-                                        else -> Alignment.TopCenter
-                                    }
-                                )
-                                .offset(
-                                    x = (settings.offsetX / 12f).dp,
-                                    y = (settings.offsetY.coerceIn(-50, 400) / 10f).dp
-                                )
-                                .background(
-                                    color = Color.White.copy(alpha = opacity),
-                                    shape = RoundedCornerShape(cornerRadius.dp)
-                                )
-                                .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(cornerRadius.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Nova Bar Preview",
-                                color = Color.Black,
-                                fontSize = (8f + settings.pillTextSize).sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                        }
-                    } else {
-                        // Split Cutout layout
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .offset(y = (settings.offsetY.coerceIn(-50, 400) / 10f).dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .width((leftW / 6).dp)
-                                    .height((24 + settings.barHeightPadding / 2).dp.coerceAtLeast(16.dp))
-                                    .background(
-                                        color = Color.White.copy(alpha = opacity),
-                                        shape = RoundedCornerShape(cornerRadius.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("Left", color = Color.Black, fontSize = (7f + settings.pillTextSize).sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            Spacer(modifier = Modifier.width(20.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .width((rightW / 6).dp)
-                                    .height((24 + settings.barHeightPadding / 2).dp.coerceAtLeast(16.dp))
-                                    .background(
-                                        color = Color.White.copy(alpha = opacity),
-                                        shape = RoundedCornerShape(cornerRadius.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("Right", color = Color.Black, fontSize = (7f + settings.pillTextSize).sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         // Layout Customizations Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -905,13 +787,6 @@ fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings)
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text("Styling & Effects", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-
-                SliderSetting(
-                    title = "Corner Radius: ${settings.cornerRadius}dp",
-                    value = settings.cornerRadius.toFloat(),
-                    valueRange = 12f..36f,
-                    onValueChange = { viewModel.setCornerRadius(it.toInt()) }
-                )
 
                 SliderSetting(
                     title = "Transparency Opacity: ${(settings.opacity * 100).toInt()}%",
@@ -2554,4 +2429,119 @@ fun DiagnosticsDashboard(
     }
 }
 
+<<<<<<< HEAD
 
+=======
+@Composable
+fun AboutScreen(settings: NovaSettings) {
+    val context = LocalContext.current
+    val scrollState = rememberScrollState()
+    val versionName = remember {
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.versionName
+        } catch (e: Exception) {
+            "2.0"
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Image(
+                    painter = painterResource(id = R.drawable.banner),
+                    contentDescription = "Nova Bar Banner",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Nova Bar",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Version $versionName",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "About Nova Bar",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Nova Bar is a premium status-bar companion and overlay interface designed for Android. It seamlessly presents active music playback, maps navigation maneuvers, battery charging details, running timers, stopwatches, device alerts, and more within a dynamic, fluid capsule. Tailor every aspect of the capsule’s size, position, opacity, and theme adaptation to match your screen layout.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        Button(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/VikrantRuhela/NovaBar"))
+                context.startActivity(intent)
+            },
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_nova_developer),
+                    contentDescription = "GitHub Icon",
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(text = "GitHub Repository", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+
+>>>>>>> f0e335e (Finalize V2.0 commit without large file)

@@ -28,9 +28,11 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.novabar.app.data.NovaSettings
 import com.novabar.app.domain.OverlayStateManager
+import com.novabar.app.domain.OverlayState
 import com.novabar.app.domain.DiagnosticsManager
 import com.novabar.app.ui.components.NovaBarUi
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 class OverlayHost(private val context: Context) {
     private val TAG = "OverlayHost"
@@ -174,8 +176,17 @@ class OverlayHost(private val context: Context) {
         scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         windowJob?.cancel()
         windowJob = scope?.launch {
-            OverlayStateManager.windowMode.collect { mode ->
-                updateWindowSize(mode, settings)
+            kotlinx.coroutines.flow.combine(
+                OverlayStateManager.windowMode,
+                OverlayStateManager.activeActivities,
+                OverlayStateManager.expandedActivityKey,
+                OverlayStateManager.pillBounds
+            ) { mode: String, activeList: List<OverlayState>, expandedKey: String?, bounds: Rect ->
+                "${mode}_${activeList.size}_${expandedKey}_${bounds.height()}"
+            }.distinctUntilChanged().collect {
+                val mode = OverlayStateManager.windowMode.value
+                val boundsHeight = OverlayStateManager.pillBounds.value.height()
+                updateWindowSize(mode, settings, boundsHeight)
             }
         }
         DiagnosticsManager.windowX.value = layoutParams.x
@@ -330,7 +341,7 @@ class OverlayHost(private val context: Context) {
         composeView = null
     }
 
-    private fun updateWindowSize(mode: String, settings: NovaSettings) {
+    private fun updateWindowSize(mode: String, settings: NovaSettings, boundsHeight: Int = 0) {
         val params = currentParams ?: return
         val compose = composeView ?: return
         val density = context.resources.displayMetrics.density
@@ -340,14 +351,39 @@ class OverlayHost(private val context: Context) {
         when (mode) {
             "Minimized" -> {
                 val h = (38 + settings.barHeightPadding).coerceAtLeast(24)
-                targetHeight = (h * density).toInt()
+                val targetHeightMin = (h * density).toInt()
+                targetHeight = maxOf(targetHeightMin, boundsHeight)
             }
             "Compact" -> {
                 val h = (44 + settings.barHeightPadding).coerceAtLeast(30)
-                targetHeight = (h * density).toInt()
+                val targetHeightComp = (h * density).toInt()
+                targetHeight = maxOf(targetHeightComp, boundsHeight)
             }
             else -> { // "Expanded"
-                targetHeight = (205 * density).toInt()
+                val activities = OverlayStateManager.activeActivities.value
+                val activeCount = activities.size
+                val expandedKey = OverlayStateManager.expandedActivityKey.value
+                val h = if (activeCount > 1) {
+                    if (expandedKey != null) {
+                        205
+                    } else {
+                        val totalCompactHeight = activities.sumOf { state ->
+                            val h: Int = when (state) {
+                                is OverlayState.Navigation -> 56
+                                is OverlayState.Media -> 52
+                                else -> 48
+                            }
+                            h
+                        }
+                        val spacing = 8
+                        val dashHeight = totalCompactHeight + (activeCount - 1) * spacing
+                        maxOf(205, dashHeight)
+                    }
+                } else {
+                    205
+                }
+                val targetHeightExp = (h * density).toInt()
+                targetHeight = maxOf(targetHeightExp, boundsHeight)
             }
         }
 
