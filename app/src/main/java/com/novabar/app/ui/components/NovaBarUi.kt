@@ -2755,7 +2755,9 @@ fun NavigationView(
                         val contextTitle = when {
                             state.roadName.isNotEmpty() -> {
                                 val road = state.roadName.trim()
-                                if (road.startsWith("towards", ignoreCase = true)) road else "Towards $road"
+                                val prefixes = listOf("towards", "toward", "continue", "stay", "keep", "merge")
+                                val hasPrefix = prefixes.any { road.startsWith(it, ignoreCase = true) }
+                                if (hasPrefix) road else "Towards $road"
                             }
                             state.maneuverInstruction.isNotEmpty() && state.maneuverInstruction.contains("towards", ignoreCase = true) -> {
                                 state.maneuverInstruction.trim()
@@ -2786,7 +2788,7 @@ fun NavigationView(
                                 ""
                             }
                         } else {
-                            state.roadName.ifEmpty { state.maneuverInstruction }
+                            state.roadName
                         }
                         if (subtitleText.isNotEmpty()) {
                             Text(

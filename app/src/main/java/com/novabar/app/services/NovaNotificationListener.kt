@@ -960,11 +960,13 @@ class NovaNotificationListener : NotificationListenerService() {
                     val roadCandidate = if (text != instructionText && !isTripInfoString(text) && !isManeuverDistanceString(text)) text else ""
                     
                     fun extractRoadName(input: String): String {
-                        val lower = input.lowercase()
+                        val lower = input.lowercase().trim()
                         return when {
                             lower.startsWith("continue on ") -> input.trim()
                             lower.startsWith("stay on ") -> input.trim()
                             lower.startsWith("keep on ") -> input.trim()
+                            lower.startsWith("towards ") -> input.trim()
+                            lower.startsWith("toward ") -> input.trim()
                             lower.contains("onto ") -> input.substring(lower.indexOf("onto ") + 5).trim()
                             lower.contains("on ") -> input.substring(lower.indexOf("on ") + 3).trim()
                             lower.contains("toward ") -> input.substring(lower.indexOf("toward ") + 7).trim()
@@ -974,20 +976,33 @@ class NovaNotificationListener : NotificationListenerService() {
                     }
                     
                     if (roadCandidate.isNotEmpty()) {
-                        val extracted = extractRoadName(roadCandidate)
-                        parsedRoadName = extracted.ifEmpty { roadCandidate }
+                        val cleaned = cleanRoadName(roadCandidate)
+                        val extracted = extractRoadName(cleaned)
+                        val candidateRoad = extracted.ifEmpty { cleaned }
+                        if (!containsTripOrDistance(candidateRoad)) {
+                            parsedRoadName = candidateRoad
+                        }
                     }
                     
                     if (parsedRoadName.isEmpty() && instructionText.isNotEmpty()) {
-                        val extracted = extractRoadName(instructionText)
-                        if (extracted.isNotEmpty()) {
-                            parsedRoadName = extracted
-                        } else if (!isTripInfoString(instructionText) && !isManeuverDistanceString(instructionText)) {
-                            parsedRoadName = instructionText
+                        val cleaned = cleanRoadName(instructionText)
+                        val extracted = extractRoadName(cleaned)
+                        val candidateRoad = extracted.ifEmpty { 
+                            if (!containsTripOrDistance(cleaned)) cleaned else "" 
+                        }
+                        if (candidateRoad.isNotEmpty() && !containsTripOrDistance(candidateRoad)) {
+                            parsedRoadName = candidateRoad
                         }
                     }
 
-                    if (isTripInfoString(parsedRoadName) || isManeuverDistanceString(parsedRoadName)) {
+                    // Check that the parsed road name is not the destination
+                    val destClean = parsedDestination.lowercase().trim()
+                    val roadClean = parsedRoadName.lowercase().trim()
+                    if (destClean.isNotEmpty() && (roadClean == destClean || roadClean == "to $destClean" || roadClean == "towards $destClean")) {
+                        parsedRoadName = ""
+                    }
+                    
+                    if (containsTripOrDistance(parsedRoadName)) {
                         parsedRoadName = ""
                     }
 
@@ -1321,6 +1336,38 @@ class NovaNotificationListener : NotificationListenerService() {
         if (clean.contains("•") || clean.contains("·") || clean.contains("min") || clean.contains("hr")) return false
         val distanceRegex = Regex("""^\s*\d+(?:[\s.,]\d+)?\s*(?:ft|feet|mi|miles|m|meters|km|км|м|yards|yd|yds)\s*$""")
         return clean.matches(distanceRegex)
+    }
+
+    private fun containsTripOrDistance(str: String): Boolean {
+        val lower = str.lowercase().trim()
+        if (lower.isEmpty()) return false
+        if (lower.contains("•") || lower.contains("·")) return true
+        
+        val timeRegex = Regex("""\b\d{1,2}:\d{2}\s*(?:am|pm)?\b""")
+        if (timeRegex.containsMatchIn(lower)) return true
+        
+        val distanceRegex = Regex("""\b\d+(?:[\s.,]\d+)?\s*(?:mi|miles|km|kilometers|ft|feet|meters|yards|yd|yds)\b""")
+        val metersRegex = Regex("""\b\d+\s*(?:m|м)\b""")
+        if (distanceRegex.containsMatchIn(lower) || metersRegex.containsMatchIn(lower)) return true
+        
+        val durationRegex = Regex("""\b\d+(?:[\s.,]\d+)?\s*(?:min|mins|minutes|hr|hrs|hour|hours|h)\b""")
+        if (durationRegex.containsMatchIn(lower)) return true
+        
+        return false
+    }
+
+    private fun cleanRoadName(road: String): String {
+        var result = road.trim()
+        if (result.endsWith(".")) {
+            result = result.substring(0, result.length - 1).trim()
+        }
+        val trailingDistanceRegex = Regex("""(?i)\s+in\s+\d+(?:[\s.,]\d+)?\s*(?:ft|feet|mi|miles|m|meters|km|км|м|yards|yd|yds)\s*$""")
+        result = result.replace(trailingDistanceRegex, "").trim()
+        val separatorIndex = result.indexOfAny(charArrayOf('•', '·'))
+        if (separatorIndex != -1) {
+            result = result.substring(0, separatorIndex).trim()
+        }
+        return result
     }
 }
 

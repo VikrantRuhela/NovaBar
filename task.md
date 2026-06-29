@@ -46,3 +46,9 @@
 - [x] Bind road-name/direction field to `state.roadName` or `state.maneuverInstruction` in `NovaBarUi.kt`
 - [x] Gracefully hide the subtitle in expanded Navigation panel if road name is empty
 - [x] Verify release compilation and generate output release build
+
+## Navigation Direction Fix Tasks
+- [x] Add containsTripOrDistance, cleanRoadName, and updated road name parsing in `NovaNotificationListener.kt`
+- [x] Bind road name subtitle field strictly to `state.roadName` (no fallback to instruction) in `NovaBarUi.kt`
+- [x] Refine contextTitle prefix matching in `NovaBarUi.kt`
+- [x] Compile release build and verify output stability
