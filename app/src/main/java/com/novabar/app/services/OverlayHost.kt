@@ -31,6 +31,7 @@ import com.novabar.app.domain.OverlayStateManager
 import com.novabar.app.domain.OverlayState
 import com.novabar.app.domain.DiagnosticsManager
 import com.novabar.app.ui.components.NovaBarUi
+import com.novabar.app.ui.theme.NovaBarTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -51,6 +52,26 @@ class OverlayHost(private val context: Context) {
 
     private val lockscreenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            val isLocked = keyguardManager.isKeyguardLocked
+            OverlayStateManager.isScreenLocked.value = isLocked
+
+            when (intent.action) {
+                Intent.ACTION_SCREEN_ON -> {
+                    OverlayStateManager.isScreenOn.value = true
+                    if (isLocked && currentSettings?.lockscreenGuardianEnabled == true) {
+                        OverlayStateManager.onLockscreenWake()
+                    }
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    OverlayStateManager.isScreenOn.value = false
+                    OverlayStateManager.onLockscreenDismiss()
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    OverlayStateManager.isScreenLocked.value = false
+                    OverlayStateManager.onLockscreenDismiss()
+                }
+            }
             updateVisibilityForLockscreen()
         }
     }
@@ -59,6 +80,8 @@ class OverlayHost(private val context: Context) {
         val settings = currentSettings ?: return
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         val isLocked = keyguardManager.isKeyguardLocked
+        OverlayStateManager.isScreenLocked.value = isLocked
+        
         val shouldHide = !settings.showOnLockscreen && isLocked
         
         composeView?.visibility = if (shouldHide) android.view.View.GONE else android.view.View.VISIBLE
@@ -211,7 +234,9 @@ class OverlayHost(private val context: Context) {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 setContent {
-                    NovaBarUi()
+                    NovaBarTheme {
+                        NovaBarUi()
+                    }
                 }
                 addOnComputeInternalInsetsListenerReflection(this) { region ->
                     region.set(OverlayStateManager.pillBounds.value)

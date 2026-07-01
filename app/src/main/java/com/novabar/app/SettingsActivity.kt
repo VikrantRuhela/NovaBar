@@ -17,6 +17,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -56,11 +57,18 @@ import com.novabar.app.utils.DeveloperLogger
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.animation.core.Animatable
 
 class SettingsActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         com.novabar.app.utils.CutoutManager.detectCutout(this)
         window.decorView.setOnApplyWindowInsetsListener { _, insets ->
@@ -69,9 +77,106 @@ class SettingsActivity : ComponentActivity() {
         }
         setContent {
             NovaBarTheme {
-                SettingsScreen(
-                    modifier = Modifier.fillMaxSize()
-                )
+                var showSplash by remember { mutableStateOf(true) }
+                var splashAlpha by remember { mutableStateOf(1f) }
+                var logoScale by remember { mutableStateOf(1f) }
+                var homeAlpha by remember { mutableStateOf(0f) }
+
+                LaunchedEffect(Unit) {
+                    // Hold splash briefly (1.2 seconds)
+                    delay(1200L)
+                    
+                    // Simultaneously animate fade-out of splash (with scale down of logo) and fade-in of Home Screen
+                    val duration = 500
+                    val anim = Animatable(0f)
+                    anim.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(durationMillis = duration, easing = FastOutSlowInEasing)
+                    ) {
+                        splashAlpha = 1f - value
+                        logoScale = 1f - value * 0.15f // scales down to 0.85f
+                        homeAlpha = value
+                    }
+                    showSplash = false
+                }
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Home Screen (fades in)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(homeAlpha)
+                    ) {
+                        SettingsScreen(
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Splash Screen (fades out and scales down mascot)
+                    if (showSplash) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black)
+                                .alpha(splashAlpha)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                
+                                // NovaGuy Redesigned Logo (Upper-Middle Area)
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_launcher_foreground_midnight),
+                                    contentDescription = "NovaGuy Mascot Logo",
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .graphicsLayer(
+                                            scaleX = logoScale,
+                                            scaleY = logoScale
+                                        )
+                                )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                // App Name
+                                Text(
+                                    text = "Nova Bar",
+                                    color = Color.White,
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 2.sp
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // Thin Glowing Accent Line
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_splash_accent_line),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .width(180.dp)
+                                        .height(2.dp)
+                                )
+                                
+                                Spacer(modifier = Modifier.weight(1.5f)) // Generous whitespace
+                                
+                                // Branded Tagline
+                                Text(
+                                    text = "Live • Contextual • Intelligent",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier.padding(bottom = 48.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -137,7 +242,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
     val tabs = listOf(
         TabItem("Home", NovaIcons.Home),
-        TabItem("Appearance", NovaIcons.Appearance),
+        TabItem("Style", NovaIcons.Appearance),
         TabItem("Activities", NovaIcons.Activities),
         TabItem("Settings", NovaIcons.Settings),
         TabItem("Developer", NovaIcons.Developer),
@@ -149,7 +254,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             FloatingPillNavigationBar(
                 tabs = tabs,
                 selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
+                onTabSelected = { selectedTab = it },
+                modifier = Modifier.navigationBarsPadding()
             )
         }
     ) { paddingValues ->
@@ -157,6 +263,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
                 .padding(bottom = paddingValues.calculateBottomPadding())
         ) {
             AnimatedContent(
@@ -207,18 +314,35 @@ fun FloatingPillNavigationBar(
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val density = LocalDensity.current
+    val tabContentWidths = remember { mutableStateMapOf<Int, Float>() }
+
     val animatedIndex by animateFloatAsState(
         targetValue = selectedTab.toFloat(),
         animationSpec = spring(
             stiffness = Spring.StiffnessLow,
             dampingRatio = Spring.DampingRatioMediumBouncy
-        )
+        ),
+        label = "animatedIndex"
+    )
+
+    val paddingPx = with(density) { 16.dp.toPx() }
+    val targetContentWidth = tabContentWidths[selectedTab] ?: with(density) { 48.dp.toPx() }
+    val targetIndicatorWidth = targetContentWidth + paddingPx * 2
+
+    val animatedWidth by animateFloatAsState(
+        targetValue = targetIndicatorWidth,
+        animationSpec = spring(
+            stiffness = Spring.StiffnessLow,
+            dampingRatio = Spring.DampingRatioMediumBouncy
+        ),
+        label = "animatedWidth"
     )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 8.dp, vertical = 12.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
         Card(
@@ -234,19 +358,23 @@ fun FloatingPillNavigationBar(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val maxWidthPx = constraints.maxWidth
-                    val tabWidth = maxWidth / tabs.size
+                    val totalWidth = constraints.maxWidth
+                    val tabWidth = totalWidth.toFloat() / tabs.size
+                    val animatedCenter = (animatedIndex + 0.5f) * tabWidth
+                    val leftOffsetPx = animatedCenter - animatedWidth / 2f
+
                     Box(
                         modifier = Modifier
-                            .width(tabWidth)
-                            .fillMaxHeight()
-                            .padding(vertical = 8.dp, horizontal = 6.dp)
+                            .align(Alignment.CenterStart)
                             .offset {
                                 IntOffset(
-                                    x = (animatedIndex * maxWidthPx / tabs.size).toInt(),
+                                    x = leftOffsetPx.roundToInt(),
                                     y = 0
                                 )
                             }
+                            .width(with(density) { animatedWidth.toDp() })
+                            .fillMaxHeight()
+                            .padding(vertical = 8.dp)
                             .background(
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                 shape = CircleShape
@@ -254,7 +382,6 @@ fun FloatingPillNavigationBar(
                     )
                 }
 
-                // Row of active icons
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically
@@ -263,7 +390,8 @@ fun FloatingPillNavigationBar(
                         val isSelected = index == selectedTab
                         val scale by animateFloatAsState(
                             targetValue = if (isSelected) 1.2f else 1.0f,
-                            animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            label = "tabScale_$index"
                         )
 
                         Box(
@@ -280,7 +408,10 @@ fun FloatingPillNavigationBar(
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    tabContentWidths[index] = coordinates.size.width.toFloat()
+                                }
                             ) {
                                 Icon(
                                     painter = painterResource(id = tab.iconRes),
@@ -668,16 +799,412 @@ fun HealthCheckRow(label: String, status: Boolean) {
 // ==========================================
 @Composable
 fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings) {
-    val scrollState = rememberScrollState()
+    var currentScreen by remember { mutableStateOf("Main") }
+
+    if (currentScreen == "AppIcon") {
+        AppIconSettingsScreen(
+            viewModel = viewModel,
+            settings = settings,
+            onBack = { currentScreen = "Main" }
+        )
+    } else {
+        val scrollState = rememberScrollState()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Layout Customizations Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("Layout & Sizing", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+
+                    ToggleSetting(
+                        title = "Camera Cutout Layout",
+                        description = "Split capsule around front camera punch-holes.",
+                        checked = settings.cameraCutoutMode,
+                        onCheckedChange = { viewModel.setCameraCutoutMode(it) }
+                    )
+
+                    if (settings.cameraCutoutMode) {
+                        SliderSetting(
+                            title = "Camera Cutout Size Scale: ${String.format(java.util.Locale.US, "%.1fx", settings.cameraCutoutGapScale)}",
+                            value = settings.cameraCutoutGapScale,
+                            valueRange = 0.7f..2.0f,
+                            onValueChange = { viewModel.setCameraCutoutGapScale(it) }
+                        )
+                        SliderSetting(
+                            title = "Left Segment Size: ${settings.leftSegmentWidthDp}dp",
+                            value = settings.leftSegmentWidthDp.toFloat(),
+                            valueRange = 60f..240f,
+                            onValueChange = { viewModel.setLeftSegmentWidthDp(it.toInt()) }
+                        )
+                        SliderSetting(
+                            title = "Right Segment Size: ${settings.rightSegmentWidthDp}dp",
+                            value = settings.rightSegmentWidthDp.toFloat(),
+                            valueRange = 60f..240f,
+                            onValueChange = { viewModel.setRightSegmentWidthDp(it.toInt()) }
+                        )
+                    } else {
+                        SliderSetting(
+                            title = "Pill Width Scale: ${String.format("%.2fx", settings.barWidthScale)}",
+                            value = settings.barWidthScale.coerceIn(0.5f..1.5f),
+                            valueRange = 0.5f..1.5f,
+                            onValueChange = { viewModel.setBarWidthScale(it) }
+                        )
+                    }
+
+                    SliderSetting(
+                        title = "Height Adjustment: ${settings.barHeightPadding}dp",
+                        value = settings.barHeightPadding.toFloat().coerceIn(-30f..40f),
+                        valueRange = -30f..40f,
+                        onValueChange = { viewModel.setBarHeightPadding(it.toInt()) }
+                    )
+
+                    SliderSetting(
+                        title = "Pill Text Size: ${if (settings.pillTextSize == 0f) "Default (0)" else if (settings.pillTextSize > 0) "+${settings.pillTextSize.toInt()}" else settings.pillTextSize.toInt().toString()}",
+                        value = settings.pillTextSize.coerceIn(-4f..6f),
+                        valueRange = -4f..6f,
+                        onValueChange = { viewModel.setPillTextSize(it) }
+                    )
+
+                    SliderSetting(
+                        title = "Vertical Position Offset Y: ${settings.offsetY}dp",
+                        value = settings.offsetY.toFloat(),
+                        valueRange = -50f..400f,
+                        onValueChange = { viewModel.setOffsetY(it.toInt()) }
+                    )
+
+                    SliderSetting(
+                        title = "Horizontal Position Offset X: ${settings.offsetX}dp",
+                        value = settings.offsetX.toFloat(),
+                        valueRange = -300f..300f,
+                        onValueChange = { viewModel.setOffsetX(it.toInt()) }
+                    )
+
+                    if (!settings.cameraCutoutMode) {
+                        Text("Pill Horizontal Alignment", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("Left", "Center", "Right").forEach { gravity ->
+                                val selected = settings.barGravity == gravity
+                                Button(
+                                    onClick = { viewModel.setBarGravity(gravity) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(gravity, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Aesthetics Settings Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("Styling & Effects", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+
+                    SliderSetting(
+                        title = "Transparency Opacity: ${(settings.opacity * 100).toInt()}%",
+                        value = settings.opacity,
+                        valueRange = 0.2f..1.0f,
+                        onValueChange = { viewModel.setOpacity(it) }
+                    )
+
+                    Divider()
+
+                    Text("Pill Appearance", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+                    val styles = listOf("Auto", "Dark", "Light", "Monet", "Custom")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        styles.forEach { style ->
+                            val selected = settings.pillAppearanceStyle == style
+                            Button(
+                                onClick = { viewModel.setPillAppearanceStyle(style) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                        Text(style, fontSize = 9.sp, maxLines = 1)
+                            }
+                        }
+                    }
+
+                    if (settings.pillAppearanceStyle == "Auto") {
+                        ToggleSetting(
+                            title = "Dynamic Luminance Adaptation",
+                            description = "Adapts text color depending on wallpaper brightness.",
+                            checked = settings.colorAdaptationEnabled,
+                            onCheckedChange = { viewModel.setColorAdaptationEnabled(it) }
+                        )
+                    }
+
+                    if (settings.pillAppearanceStyle == "Custom") {
+                        Divider()
+                        Text("Custom Color Picker", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+                        var customColor by remember(settings.pillCustomColor) {
+                            mutableStateOf(Color(settings.pillCustomColor))
+                        }
+
+                        val presetColors = listOf(
+                            Color(0xFFE57373),
+                            Color(0xFFFF8A65),
+                            Color(0xFFFFB74D),
+                            Color(0xFF81C784),
+                            Color(0xFF4DB6AC),
+                            Color(0xFF64B5F6),
+                            Color(0xFF7986CB),
+                            Color(0xFFBA68C8),
+                            Color(0xFFF06292),
+                            Color(0xFF37474F),
+                            Color(0xFF212121),
+                            Color(0xFFFFFFFF)
+                        )
+
+                        Text("Presets", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            presetColors.forEach { color ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .border(
+                                            width = if (customColor == color) 2.dp else 1.dp,
+                                            color = if (customColor == color) MaterialTheme.colorScheme.primary else Color.LightGray,
+                                            shape = CircleShape
+                                        )
+                                        .clickable {
+                                            customColor = color
+                                            viewModel.setPillCustomColor(color.toArgb())
+                                        }
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            var hexText by remember(customColor) {
+                                val argb = customColor.toArgb()
+                                val hex = String.format("#%06X", 0xFFFFFF and argb)
+                                mutableStateOf(hex)
+                            }
+
+                            OutlinedTextField(
+                                value = hexText,
+                                onValueChange = { newValue ->
+                                    hexText = newValue
+                                    val cleaned = newValue.trim().uppercase()
+                                    val hexPattern = "^#?[0-9A-F]{6}$".toRegex()
+                                    if (cleaned.matches(hexPattern)) {
+                                        val hexStr = if (cleaned.startsWith("#")) cleaned.substring(1) else cleaned
+                                        try {
+                                            val parsedColor = Color(android.graphics.Color.parseColor("#$hexStr"))
+                                            customColor = parsedColor
+                                            viewModel.setPillCustomColor(parsedColor.toArgb())
+                                        } catch (e: Exception) {
+                                            // Ignore
+                                        }
+                                    }
+                                },
+                                label = { Text("Hex Code", fontSize = 11.sp) },
+                                maxLines = 1,
+                                textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(customColor)
+                                    .border(1.dp, Color.LightGray, CircleShape)
+                            )
+                        }
+
+                        var rVal by remember(customColor) { mutableStateOf(customColor.red * 255f) }
+                        var gVal by remember(customColor) { mutableStateOf(customColor.green * 255f) }
+                        var bVal by remember(customColor) { mutableStateOf(customColor.blue * 255f) }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Red: ${rVal.toInt()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Slider(
+                                    value = rVal,
+                                    valueRange = 0f..255f,
+                                    onValueChange = {
+                                        rVal = it
+                                        customColor = Color(rVal.roundToInt(), gVal.roundToInt(), bVal.roundToInt())
+                                    },
+                                    onValueChangeFinished = {
+                                        viewModel.setPillCustomColor(customColor.toArgb())
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Green: ${gVal.toInt()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Slider(
+                                    value = gVal,
+                                    valueRange = 0f..255f,
+                                    onValueChange = {
+                                        gVal = it
+                                        customColor = Color(rVal.roundToInt(), gVal.roundToInt(), bVal.roundToInt())
+                                    },
+                                    onValueChangeFinished = {
+                                        viewModel.setPillCustomColor(customColor.toArgb())
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Blue: ${bVal.toInt()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Slider(
+                                    value = bVal,
+                                    valueRange = 0f..255f,
+                                    onValueChange = {
+                                        bVal = it
+                                        customColor = Color(rVal.roundToInt(), gVal.roundToInt(), bVal.roundToInt())
+                                    },
+                                    onValueChangeFinished = {
+                                        viewModel.setPillCustomColor(customColor.toArgb())
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // App Icon Customization Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { currentScreen = "AppIcon" },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("App Icon", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("Customize the launcher mascot style.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(
+                        painter = painterResource(id = NovaIcons.ArrowRight),
+                        contentDescription = "Navigate to App Icon settings",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppIconSettingsScreen(
+    viewModel: SettingsViewModel,
+    settings: NovaSettings,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Layout Customizations Card
+        // Back Button & Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    painter = painterResource(id = NovaIcons.ArrowRight),
+                    contentDescription = "Back",
+                    modifier = Modifier
+                        .size(24.dp)
+                        .graphicsLayer(rotationZ = 180f),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("App Icon", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Text(
+            text = "Select a mascot style for the launcher icon.",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        // Options List Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -685,124 +1212,81 @@ fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Layout & Sizing", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-
-                ToggleSetting(
-                    title = "Camera Cutout Layout",
-                    description = "Split capsule around front camera punch-holes.",
-                    checked = settings.cameraCutoutMode,
-                    onCheckedChange = { viewModel.setCameraCutoutMode(it) }
+                val options = listOf(
+                    "Automatic" to "Follows system theme (Midnight in Dark mode, Frost in Light mode, Material You if enabled).",
+                    "Midnight" to "Always use the dark NovaGuy icon (Deep black background, white logo).",
+                    "Frost" to "Always use the light NovaGuy icon (Pure white background, black logo).",
+                    "Material You" to "Always request the Android monochrome themed icon (launcher dependent)."
                 )
 
-                if (settings.cameraCutoutMode) {
-                    SliderSetting(
-                        title = "Camera Cutout Size Scale: ${String.format(java.util.Locale.US, "%.1fx", settings.cameraCutoutGapScale)}",
-                        value = settings.cameraCutoutGapScale,
-                        valueRange = 0.7f..2.0f,
-                        onValueChange = { viewModel.setCameraCutoutGapScale(it) }
-                    )
-                    SliderSetting(
-                        title = "Left Segment Size: ${settings.leftSegmentWidthDp}dp",
-                        value = settings.leftSegmentWidthDp.toFloat(),
-                        valueRange = 60f..240f,
-                        onValueChange = { viewModel.setLeftSegmentWidthDp(it.toInt()) }
-                    )
-                    SliderSetting(
-                        title = "Right Segment Size: ${settings.rightSegmentWidthDp}dp",
-                        value = settings.rightSegmentWidthDp.toFloat(),
-                        valueRange = 60f..240f,
-                        onValueChange = { viewModel.setRightSegmentWidthDp(it.toInt()) }
-                    )
-                } else {
-                    SliderSetting(
-                        title = "Pill Width Scale: ${String.format("%.2fx", settings.barWidthScale)}",
-                        value = settings.barWidthScale.coerceIn(0.5f..1.5f),
-                        valueRange = 0.5f..1.5f,
-                        onValueChange = { viewModel.setBarWidthScale(it) }
-                    )
-                }
+                options.forEach { (title, description) ->
+                    val selected = settings.appIconMode == title
 
-                SliderSetting(
-                    title = "Height Adjustment: ${settings.barHeightPadding}dp",
-                    value = settings.barHeightPadding.toFloat().coerceIn(-30f..40f),
-                    valueRange = -30f..40f,
-                    onValueChange = { viewModel.setBarHeightPadding(it.toInt()) }
-                )
-
-                SliderSetting(
-                    title = "Pill Text Size: ${if (settings.pillTextSize == 0f) "Default (0)" else if (settings.pillTextSize > 0) "+${settings.pillTextSize.toInt()}" else settings.pillTextSize.toInt().toString()}",
-                    value = settings.pillTextSize.coerceIn(-4f..6f),
-                    valueRange = -4f..6f,
-                    onValueChange = { viewModel.setPillTextSize(it) }
-                )
-
-                SliderSetting(
-                    title = "Vertical Position Offset Y: ${settings.offsetY}dp",
-                    value = settings.offsetY.toFloat(),
-                    valueRange = -50f..400f,
-                    onValueChange = { viewModel.setOffsetY(it.toInt()) }
-                )
-
-                SliderSetting(
-                    title = "Horizontal Position Offset X: ${settings.offsetX}dp",
-                    value = settings.offsetX.toFloat(),
-                    valueRange = -300f..300f,
-                    onValueChange = { viewModel.setOffsetX(it.toInt()) }
-                )
-
-                if (!settings.cameraCutoutMode) {
-                    Text("Pill Horizontal Alignment", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("Left", "Center", "Right").forEach { gravity ->
-                            val selected = settings.barGravity == gravity
-                            Button(
-                                onClick = { viewModel.setBarGravity(gravity) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(gravity, fontSize = 12.sp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.setAppIconMode(title)
+                                com.novabar.app.utils.AppIconManager.switchIcon(context, title)
                             }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = {
+                                viewModel.setAppIconMode(title)
+                                com.novabar.app.utils.AppIconManager.switchIcon(context, title)
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (title == "Automatic") "Automatic (Recommended)" else title,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = description,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Aesthetics Settings Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+        // Info box for Material You
+        if (settings.appIconMode == "Material You") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
             ) {
-                Text("Styling & Effects", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-
-                SliderSetting(
-                    title = "Transparency Opacity: ${(settings.opacity * 100).toInt()}%",
-                    value = settings.opacity,
-                    valueRange = 0.2f..1.0f,
-                    onValueChange = { viewModel.setOpacity(it) }
-                )
-
-
-
-                ToggleSetting(
-                    title = "Dynamic Luminance Adaptation",
-                    description = "Adapts text color depending on wallpaper brightness.",
-                    checked = settings.colorAdaptationEnabled,
-                    onCheckedChange = { viewModel.setColorAdaptationEnabled(it) }
-                )
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(id = NovaIcons.Info),
+                        contentDescription = "Info",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Material You themed icons depend on launcher support. If your launcher does not support them, the icon will fallback to follow the default system theme gracefully.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
     }
@@ -843,6 +1327,8 @@ fun ActivityManagerScreen(viewModel: SettingsViewModel, settings: NovaSettings) 
             val isStopwatchActive = activeActivitiesList.any { it is OverlayState.Stopwatch }
             val isChargingActive = activeActivitiesList.any { it is OverlayState.Charging }
             val isNotificationActive = activeActivitiesList.any { it is OverlayState.Notification }
+            val isVoiceRecorderActive = activeActivitiesList.any { it is OverlayState.VoiceRecorder }
+            val isNovaGuyActive = activeActivitiesList.any { it is OverlayState.NovaGuy }
 
             val torchState by OverlayStateManager.torchState.collectAsState()
             val isTorchActive = torchState != null
@@ -923,6 +1409,24 @@ fun ActivityManagerScreen(viewModel: SettingsViewModel, settings: NovaSettings) 
             ) {
                 selectedActivityDetail = "notifications"
             }
+            ActivityCardItem(
+                title = "Voice Recorder Live Status",
+                desc = "Displays dynamic recording states and controls.",
+                iconRes = NovaIcons.VoiceRecorder,
+                isEnabled = settings.voiceRecorderEnabled,
+                statusText = if (isVoiceRecorderActive) "Active (Recording)" else "Inactive"
+            ) {
+                selectedActivityDetail = "voice_recorder"
+            }
+            ActivityCardItem(
+                title = "NovaGuy Idle Personality",
+                desc = "Idle face animation shown when bar is inactive.",
+                iconRes = NovaIcons.Info,
+                isEnabled = settings.alwaysOnNovaGuy,
+                statusText = if (isNovaGuyActive) "Active (Idle)" else "Inactive"
+            ) {
+                selectedActivityDetail = "novaguy"
+            }
         }
     }
 
@@ -945,6 +1449,8 @@ fun ActivityManagerScreen(viewModel: SettingsViewModel, settings: NovaSettings) 
                         "charging" -> "Charging Settings"
                         "torch" -> "Torch Flashlight Settings"
                         "hotspot" -> "Wi-Fi Hotspot Settings"
+                        "voice_recorder" -> "Voice Recorder Settings"
+                        "novaguy" -> "NovaGuy Idle Settings"
                         else -> "Notification Settings"
                     },
                     fontWeight = FontWeight.Bold
@@ -1076,6 +1582,117 @@ fun ActivityManagerScreen(viewModel: SettingsViewModel, settings: NovaSettings) 
                                 description = "Displays heads-up popup banners in pill.",
                                 checked = settings.notificationsEnabled,
                                 onCheckedChange = { viewModel.setNotificationsEnabled(it) }
+                            )
+                        }
+                        "voice_recorder" -> {
+                            ToggleSetting(
+                                title = "Enable Voice Recorder Module",
+                                description = "Allows Nova Bar to display ongoing recording status inside the pill.",
+                                checked = settings.voiceRecorderEnabled,
+                                onCheckedChange = { viewModel.setVoiceRecorderEnabled(it) }
+                            )
+                        }
+                        "novaguy" -> {
+                            ToggleSetting(
+                                title = "Enable Always On NovaGuy",
+                                description = "Allows NovaGuy face to appear when there are no active modules.",
+                                checked = settings.alwaysOnNovaGuy,
+                                onCheckedChange = { viewModel.setAlwaysOnNovaGuy(it) }
+                            )
+
+                            Divider()
+
+                            var sliderValue by remember(settings.novaGuyMinInterval, settings.novaGuyMaxInterval) {
+                                mutableStateOf(settings.novaGuyMinInterval.toFloat()..settings.novaGuyMaxInterval.toFloat())
+                            }
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Appearance Interval",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${sliderValue.start.roundToInt()} min – ${sliderValue.endInclusive.roundToInt()} min",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                
+                                RangeSlider(
+                                    value = sliderValue,
+                                    onValueChange = { range ->
+                                        val rawMin = range.start.roundToInt()
+                                        val rawMax = range.endInclusive.roundToInt()
+                                        val finalMin = rawMin.coerceIn(1, 20)
+                                        val finalMax = rawMax.coerceIn(1, 20)
+                                        
+                                        if (finalMax - finalMin >= 1) {
+                                            sliderValue = finalMin.toFloat()..finalMax.toFloat()
+                                        } else {
+                                            val prevMin = sliderValue.start.roundToInt()
+                                            val prevMax = sliderValue.endInclusive.roundToInt()
+                                            if (finalMin != prevMin) {
+                                                val adjustedMin = (finalMax - 1).coerceAtLeast(1)
+                                                sliderValue = adjustedMin.toFloat()..finalMax.toFloat()
+                                            } else if (finalMax != prevMax) {
+                                                val adjustedMax = (finalMin + 1).coerceAtMost(20)
+                                                sliderValue = finalMin.toFloat()..adjustedMax.toFloat()
+                                            }
+                                        }
+                                    },
+                                    onValueChangeFinished = {
+                                        val minVal = sliderValue.start.roundToInt()
+                                        val maxVal = sliderValue.endInclusive.roundToInt()
+                                        viewModel.setNovaGuyMinInterval(minVal)
+                                        viewModel.setNovaGuyMaxInterval(maxVal)
+                                    },
+                                    valueRange = 1f..20f,
+                                    steps = 18,
+                                    colors = SliderDefaults.colors(
+                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        thumbColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Divider()
+
+                            ToggleSetting(
+                                title = "Lock Screen Guardian",
+                                description = "Allows NovaGuy to watch over the device on the lock screen.",
+                                checked = settings.lockscreenGuardianEnabled,
+                                onCheckedChange = { viewModel.setLockscreenGuardianEnabled(it) }
+                            )
+
+                            Divider()
+
+                            ToggleSetting(
+                                title = "Enable NovaGuy Messages",
+                                description = "Allows tapping NovaGuy to open the expanded personality panel.",
+                                checked = settings.enableNovaGuyMessages,
+                                onCheckedChange = { viewModel.setEnableNovaGuyMessages(it) }
+                            )
+
+                            Divider()
+
+                            ToggleSetting(
+                                title = "Context Aware Messages",
+                                description = "Intelligently selects messages based on the current device state.",
+                                checked = settings.contextAwareMessagesEnabled,
+                                onCheckedChange = { viewModel.setContextAwareMessagesEnabled(it) }
                             )
                         }
                     }
@@ -1217,7 +1834,7 @@ fun GeneralSettingsScreen(viewModel: SettingsViewModel, settings: NovaSettings) 
                         val selected = settings.overlayEngine == engine
                         val label = when (engine) {
                             OverlayEngine.APPLICATION -> "App Layer"
-                            OverlayEngine.ACCESSIBILITY -> "A11y Layer"
+                            OverlayEngine.ACCESSIBILITY -> "Accessibility Layer"
                         }
                         Button(
                             onClick = { viewModel.setOverlayEngine(engine) },
@@ -1506,8 +2123,8 @@ fun DeveloperScreen(
             }
 
             DiagnosticsSection(title = "Accessibility Engine Diagnostics") {
-                DiagnosticsRow("A11y service running", if (hasAccessibilityPermission) "ENABLED" else "DISABLED")
-                DiagnosticsRow("A11y Window overlay attached", accessibilityOverlayActive.toString())
+                DiagnosticsRow("Accessibility service running", if (hasAccessibilityPermission) "ENABLED" else "DISABLED")
+                DiagnosticsRow("Accessibility Window overlay attached", accessibilityOverlayActive.toString())
                 DiagnosticsRow("Recent trigger event", lastAccessibilityEvent)
                 DiagnosticsRow("Foreground Package listener", accessibilityForegroundPackage)
             }
@@ -1809,12 +2426,114 @@ private fun isAccessibilityServiceEnabled(context: Context): Boolean {
 
 private fun exportSettings(s: NovaSettings): String {
     val pkgs = s.allowedNotificationPackages.joinToString("|")
-    return "NovaBarSettingsV6:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},25,${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode},${s.cameraCutoutGapScale},${s.leftSegmentWidthDp},${s.rightSegmentWidthDp},${s.pillTextSize}"
+    return "NovaBarSettingsV8:${s.isEnabled},${s.positionY},${s.cornerRadius},${s.opacity},25,${s.animationSpeedMultiplier},${s.mediaControlsEnabled},${s.timerEnabled},${s.stopwatchEnabled},${s.navigationEnabled},${s.chargingEnabled},${s.notificationsEnabled},${s.colorAdaptationEnabled},${pkgs},${s.barWidthScale},${s.barHeightPadding},${s.barBorderThickness},${s.barGravity},${s.offsetX},${s.offsetY},${s.showWhenIdle},${s.defaultPresentationMode},${s.visualizerStyle},${s.visualizerSensitivity},${s.albumArtCornerRadius},${s.progressVisibility},${s.autoCollapseTimeout},${s.textSize},${s.overlayPosition},${s.alwaysOnBar},${s.alwaysOnConfig},${s.timeFormat},${s.showSeconds},${s.showOnLockscreen},${s.cameraCutoutMode},${s.cameraCutoutGapScale},${s.leftSegmentWidthDp},${s.rightSegmentWidthDp},${s.pillTextSize},${s.alwaysOnNovaGuy},${s.novaGuyMinInterval},${s.novaGuyMaxInterval},${s.lockscreenGuardianEnabled},${s.enableNovaGuyMessages},${s.contextAwareMessagesEnabled},${s.pillAppearanceStyle},${s.pillCustomColor}"
 }
 
 private fun importSettings(str: String): NovaSettings? {
     return try {
-        if (str.startsWith("NovaBarSettingsV6:")) {
+        if (str.startsWith("NovaBarSettingsV8:")) {
+            val parts = str.substringAfter("NovaBarSettingsV8:").split(",")
+            val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
+            NovaSettings(
+                isEnabled = parts[0].toBoolean(),
+                positionY = parts[1].toInt(),
+                cornerRadius = parts[2].toInt(),
+                opacity = parts[3].toFloat(),
+                animationSpeedMultiplier = parts[5].toFloat(),
+                mediaControlsEnabled = parts[6].toBoolean(),
+                timerEnabled = parts[7].toBoolean(),
+                stopwatchEnabled = parts[8].toBoolean(),
+                navigationEnabled = parts[9].toBoolean(),
+                chargingEnabled = parts[10].toBoolean(),
+                notificationsEnabled = parts[11].toBoolean(),
+                colorAdaptationEnabled = parts[12].toBoolean(),
+                allowedNotificationPackages = pkgs,
+                barWidthScale = parts[14].toFloat(),
+                barHeightPadding = parts[15].toInt(),
+                barBorderThickness = parts[16].toInt(),
+                barGravity = parts[17],
+                offsetX = parts[18].toInt(),
+                offsetY = parts[19].toInt(),
+                showWhenIdle = parts[20].toBoolean(),
+                defaultPresentationMode = parts[21],
+                visualizerStyle = parts[22],
+                visualizerSensitivity = parts[23].toFloat(),
+                albumArtCornerRadius = parts[24].toInt(),
+                progressVisibility = parts[25].toBoolean(),
+                autoCollapseTimeout = parts[26].toInt(),
+                textSize = parts[27],
+                overlayPosition = parts[28],
+                alwaysOnBar = parts[29].toBoolean(),
+                alwaysOnConfig = parts[30],
+                timeFormat = parts[31],
+                showSeconds = parts[32].toBoolean(),
+                showOnLockscreen = parts[33].toBoolean(),
+                cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false,
+                cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f,
+                leftSegmentWidthDp = if (parts.size > 36) parts[36].toInt() else 120,
+                rightSegmentWidthDp = if (parts.size > 37) parts[37].toInt() else 120,
+                pillTextSize = if (parts.size > 38) parts[38].toFloat() else 0.0f,
+                alwaysOnNovaGuy = if (parts.size > 39) parts[39].toBoolean() else true,
+                novaGuyMinInterval = if (parts.size > 40) parts[40].toInt() else 5,
+                novaGuyMaxInterval = if (parts.size > 41) parts[41].toInt() else 10,
+                lockscreenGuardianEnabled = if (parts.size > 42) parts[42].toBoolean() else true,
+                enableNovaGuyMessages = if (parts.size > 43) parts[43].toBoolean() else true,
+                contextAwareMessagesEnabled = if (parts.size > 44) parts[44].toBoolean() else true,
+                pillAppearanceStyle = if (parts.size > 45) parts[45] else "Auto",
+                pillCustomColor = if (parts.size > 46) parts[46].toInt() else 0xFF1E88E5.toInt()
+            )
+        } else if (str.startsWith("NovaBarSettingsV7:")) {
+            val parts = str.substringAfter("NovaBarSettingsV7:").split(",")
+            val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
+            NovaSettings(
+                isEnabled = parts[0].toBoolean(),
+                positionY = parts[1].toInt(),
+                cornerRadius = parts[2].toInt(),
+                opacity = parts[3].toFloat(),
+                animationSpeedMultiplier = parts[5].toFloat(),
+                mediaControlsEnabled = parts[6].toBoolean(),
+                timerEnabled = parts[7].toBoolean(),
+                stopwatchEnabled = parts[8].toBoolean(),
+                navigationEnabled = parts[9].toBoolean(),
+                chargingEnabled = parts[10].toBoolean(),
+                notificationsEnabled = parts[11].toBoolean(),
+                colorAdaptationEnabled = parts[12].toBoolean(),
+                allowedNotificationPackages = pkgs,
+                barWidthScale = parts[14].toFloat(),
+                barHeightPadding = parts[15].toInt(),
+                barBorderThickness = parts[16].toInt(),
+                barGravity = parts[17],
+                offsetX = parts[18].toInt(),
+                offsetY = parts[19].toInt(),
+                showWhenIdle = parts[20].toBoolean(),
+                defaultPresentationMode = parts[21],
+                visualizerStyle = parts[22],
+                visualizerSensitivity = parts[23].toFloat(),
+                albumArtCornerRadius = parts[24].toInt(),
+                progressVisibility = parts[25].toBoolean(),
+                autoCollapseTimeout = parts[26].toInt(),
+                textSize = parts[27],
+                overlayPosition = parts[28],
+                alwaysOnBar = parts[29].toBoolean(),
+                alwaysOnConfig = parts[30],
+                timeFormat = parts[31],
+                showSeconds = parts[32].toBoolean(),
+                showOnLockscreen = parts[33].toBoolean(),
+                cameraCutoutMode = if (parts.size > 34) parts[34].toBoolean() else false,
+                cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f,
+                leftSegmentWidthDp = if (parts.size > 36) parts[36].toInt() else 120,
+                rightSegmentWidthDp = if (parts.size > 37) parts[37].toInt() else 120,
+                pillTextSize = if (parts.size > 38) parts[38].toFloat() else 0.0f,
+                alwaysOnNovaGuy = if (parts.size > 39) parts[39].toBoolean() else true,
+                novaGuyMinInterval = if (parts.size > 40) parts[40].toInt() else 5,
+                novaGuyMaxInterval = if (parts.size > 41) parts[41].toInt() else 10,
+                lockscreenGuardianEnabled = if (parts.size > 42) parts[42].toBoolean() else true,
+                enableNovaGuyMessages = if (parts.size > 43) parts[43].toBoolean() else true,
+                contextAwareMessagesEnabled = if (parts.size > 44) parts[44].toBoolean() else true,
+                pillAppearanceStyle = "Auto",
+                pillCustomColor = 0xFF1E88E5.toInt()
+            )
+        } else if (str.startsWith("NovaBarSettingsV6:")) {
             val parts = str.substringAfter("NovaBarSettingsV6:").split(",")
             val pkgs = parts[13].split("|").filter { it.isNotEmpty() }.toSet()
             NovaSettings(
@@ -1855,7 +2574,13 @@ private fun importSettings(str: String): NovaSettings? {
                 cameraCutoutGapScale = if (parts.size > 35) parts[35].toFloat() else 1.0f,
                 leftSegmentWidthDp = if (parts.size > 36) parts[36].toInt() else 120,
                 rightSegmentWidthDp = if (parts.size > 37) parts[37].toInt() else 120,
-                pillTextSize = if (parts.size > 38) parts[38].toFloat() else 0.0f
+                pillTextSize = if (parts.size > 38) parts[38].toFloat() else 0.0f,
+                alwaysOnNovaGuy = if (parts.size > 39) parts[39].toBoolean() else true,
+                novaGuyMinInterval = 5,
+                novaGuyMaxInterval = 10,
+                lockscreenGuardianEnabled = if (parts.size > 41) parts[41].toBoolean() else true,
+                enableNovaGuyMessages = if (parts.size > 42) parts[42].toBoolean() else true,
+                contextAwareMessagesEnabled = if (parts.size > 43) parts[43].toBoolean() else true
             )
         } else if (str.startsWith("NovaBarSettingsV5:")) {
             val parts = str.substringAfter("NovaBarSettingsV5:").split(",")

@@ -121,6 +121,23 @@ data class HotspotState(
     val isDisableSupported: Boolean = false
 )
 
+data class VoiceRecorderState(
+    val isRecording: Boolean = false,
+    val isPaused: Boolean = false,
+    val durationMs: Long = 0L,
+    val startElapsedRealtime: Long = 0L,
+    val hasPause: Boolean = false,
+    val hasResume: Boolean = false,
+    val hasStop: Boolean = false,
+    val appIcon: android.graphics.drawable.Drawable? = null,
+    val appName: String = "",
+    val packageName: String = "",
+    val pauseIntent: android.app.PendingIntent? = null,
+    val resumeIntent: android.app.PendingIntent? = null,
+    val stopIntent: android.app.PendingIntent? = null,
+    val amplitudes: List<Float>? = null
+)
+
 sealed class OverlayState {
     object Idle : OverlayState()
     data class Charging(val data: ChargingState) : OverlayState()
@@ -132,4 +149,6 @@ sealed class OverlayState {
     data class PhoneCall(val data: PhoneCallState) : OverlayState()
     data class Torch(val data: TorchState) : OverlayState()
     data class Hotspot(val data: HotspotState) : OverlayState()
+    data class VoiceRecorder(val data: VoiceRecorderState) : OverlayState()
+    object NovaGuy : OverlayState()
 }

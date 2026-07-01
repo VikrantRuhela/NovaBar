@@ -29,10 +29,12 @@ class NovaNotificationListener : NotificationListenerService() {
         private var activeController: MediaController? = null
         private var activeTimerSbn: StatusBarNotification? = null
         private var activeStopwatchSbn: StatusBarNotification? = null
+        private var activeVoiceRecorderSbn: StatusBarNotification? = null
 
         fun getActiveMediaController(): MediaController? = activeController
         fun getActiveTimerSbn(): StatusBarNotification? = activeTimerSbn
         fun getActiveStopwatchSbn(): StatusBarNotification? = activeStopwatchSbn
+        fun getActiveVoiceRecorderSbn(): StatusBarNotification? = activeVoiceRecorderSbn
 
         fun play() {
             Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_PLAY")
@@ -191,6 +193,78 @@ class NovaNotificationListener : NotificationListenerService() {
             if (success) {
                 activeStopwatchSbn = null
                 OverlayStateManager.setStopwatchState(null)
+            }
+        }
+
+        fun pauseVoiceRecorder() {
+            val current = OverlayStateManager.voiceRecorderState.value
+            if (current?.pauseIntent != null) {
+                try {
+                    current.pauseIntent.send()
+                    Log.d("NovaBar", "VOICE_RECORDER_PAUSE: Sent matched PendingIntent successfully")
+                    OverlayStateManager.setVoiceRecorderState(current.copy(
+                        isRecording = false,
+                        isPaused = true
+                    ))
+                } catch (e: Exception) {
+                    Log.e("NovaBar", "VOICE_RECORDER_PAUSE: Failed to send PendingIntent", e)
+                }
+            } else {
+                val success = triggerNotificationAction(activeVoiceRecorderSbn, listOf("pause", "stop", "hold"), "VOICE_RECORDER_PAUSE")
+                if (success) {
+                    if (current != null) {
+                        OverlayStateManager.setVoiceRecorderState(current.copy(
+                            isRecording = false,
+                            isPaused = true
+                        ))
+                    }
+                }
+            }
+        }
+
+        fun resumeVoiceRecorder() {
+            val current = OverlayStateManager.voiceRecorderState.value
+            if (current?.resumeIntent != null) {
+                try {
+                    current.resumeIntent.send()
+                    Log.d("NovaBar", "VOICE_RECORDER_RESUME: Sent matched PendingIntent successfully")
+                    OverlayStateManager.setVoiceRecorderState(current.copy(
+                        isRecording = true,
+                        isPaused = false
+                    ))
+                } catch (e: Exception) {
+                    Log.e("NovaBar", "VOICE_RECORDER_RESUME: Failed to send PendingIntent", e)
+                }
+            } else {
+                val success = triggerNotificationAction(activeVoiceRecorderSbn, listOf("resume", "continue", "start", "record", "play"), "VOICE_RECORDER_RESUME")
+                if (success) {
+                    if (current != null) {
+                        OverlayStateManager.setVoiceRecorderState(current.copy(
+                            isRecording = true,
+                            isPaused = false
+                        ))
+                    }
+                }
+            }
+        }
+
+        fun stopVoiceRecorder() {
+            val current = OverlayStateManager.voiceRecorderState.value
+            if (current?.stopIntent != null) {
+                try {
+                    current.stopIntent.send()
+                    Log.d("NovaBar", "VOICE_RECORDER_STOP: Sent matched PendingIntent successfully")
+                    activeVoiceRecorderSbn = null
+                    OverlayStateManager.setVoiceRecorderState(null)
+                } catch (e: Exception) {
+                    Log.e("NovaBar", "VOICE_RECORDER_STOP: Failed to send PendingIntent", e)
+                }
+            } else {
+                val success = triggerNotificationAction(activeVoiceRecorderSbn, listOf("stop", "done", "save", "discard", "delete", "finish"), "VOICE_RECORDER_STOP")
+                if (success) {
+                    activeVoiceRecorderSbn = null
+                    OverlayStateManager.setVoiceRecorderState(null)
+                }
             }
         }
 
@@ -657,13 +731,46 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
-                if (sbn.packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
-                    Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_IGNORED: package=${sbn.packageName}")
-                    return@launch
-                }
                 val packageName = sbn.packageName
                 val notification = sbn.notification
-                val extras = notification.extras
+                val extras = notification.extras ?: android.os.Bundle()
+
+                val isVoiceRecorderPkg = packageName.contains("recorder") || 
+                        packageName.contains("voicenote") || 
+                        packageName.contains("soundrec") || 
+                        packageName.contains("audiorec") || 
+                        packageName.contains("dictaphone") ||
+                        packageName == "com.sec.android.app.voicenote" ||
+                        packageName == "com.google.android.apps.recorder"
+
+                if (isVoiceRecorderPkg) {
+                    val ongoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+                    val layoutId = notification.contentView?.layoutId ?: 0
+                    val layoutName = try {
+                        val packageContext = createPackageContext(packageName, 0)
+                        packageContext.resources.getResourceEntryName(layoutId)
+                    } catch (e: Exception) {
+                        "unknown"
+                    }
+                    val actionsList = notification.actions ?: emptyArray()
+                    val actionsStr = actionsList.mapIndexed { idx, act -> 
+                        "Action #$idx: title='${act.title}', hasIntent=${act.actionIntent != null}"
+                    }.joinToString(", ")
+                    val extrasStr = try {
+                        extras.keySet().map { "$it=${extras.get(it)}" }.joinToString(", ")
+                    } catch (e: Exception) {
+                        "error_reading_extras"
+                    }
+                    val chronometerInfo = "showChronometer=${extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER)}, base=${notification.`when`}"
+                    
+                    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 1: onNotificationPosted() | package=$packageName | key=${sbn.key} | id=${sbn.id} | flags=${notification.flags} | category=${notification.category} | isOngoing=$ongoing")
+                    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 2: Parsing | title='${extras.getCharSequence(android.app.Notification.EXTRA_TITLE)}' | text='${extras.getCharSequence(android.app.Notification.EXTRA_TEXT)}' | extras={$extrasStr} | chronometer={$chronometerInfo} | actionCount=${actionsList.size} | actions=[$actionsStr] | layoutId=$layoutId | layoutPkg=${notification.contentView?.getPackage()} | layoutName=$layoutName")
+                }
+
+                if (packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
+                    android.util.Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_IGNORED: package=${sbn.packageName}")
+                    return@launch
+                }
 
                 // Check if it is a media notification, and if so, update active sessions immediately as a backup
                 val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
@@ -1025,6 +1132,22 @@ class NovaNotificationListener : NotificationListenerService() {
                     Log.i("NovaBar-Navigation", "Classification REJECTED: $reason")
                 }
 
+                // 1.5. Check if Voice Recorder Notification
+                val isActiveVoiceRecorder = (activeVoiceRecorderSbn?.packageName == sbn.packageName)
+                when (val parsedState = com.novabar.app.utils.VoiceRecorderCompatibilityLayer.parse(sbn, settings, this@NovaNotificationListener, isActiveVoiceRecorder)) {
+                    is com.novabar.app.utils.ParsedVoiceRecorderState.Active -> {
+                        activeVoiceRecorderSbn = sbn
+                        OverlayStateManager.setVoiceRecorderState(parsedState.state)
+                        return@launch
+                    }
+                    else -> {
+                        if (isActiveVoiceRecorder) {
+                            activeVoiceRecorderSbn = null
+                            OverlayStateManager.setVoiceRecorderState(null)
+                        }
+                    }
+                }
+
                 // 2. Check if Clock app (Timer or Stopwatch)
 
                 val isClock = packageName.contains("clock", ignoreCase = true) || 
@@ -1158,11 +1281,24 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
-                if (sbn.packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
-                    Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_REMOVED_IGNORED: package=${sbn.packageName}")
+                val packageName = sbn.packageName
+                val isVoiceRecorderPkg = packageName.contains("recorder") || 
+                        packageName.contains("voicenote") || 
+                        packageName.contains("soundrec") || 
+                        packageName.contains("audiorec") || 
+                        packageName.contains("dictaphone") ||
+                        packageName == "com.sec.android.app.voicenote" ||
+                        packageName == "com.google.android.apps.recorder"
+
+                if (isVoiceRecorderPkg) {
+                    val ongoing = (sbn.notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+                    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 1: onNotificationRemoved() | package=$packageName | key=${sbn.key} | id=${sbn.id} | flags=${sbn.notification.flags} | category=${sbn.notification.category} | isOngoing=$ongoing")
+                }
+
+                if (packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
+                    android.util.Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_REMOVED_IGNORED: package=${sbn.packageName}")
                     return@launch
                 }
-                val packageName = sbn.packageName
                 val currentNotification = OverlayStateManager.activeState.value
                 
                 // Clear call state if incall notification is removed
@@ -1195,6 +1331,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification was removed.")
                     activeStopwatchSbn = null
                     OverlayStateManager.setStopwatchState(null)
+                }
+                if (activeVoiceRecorderSbn?.key == sbn.key) {
+                    Log.i("NovaBar-VoiceRecorder", "Activity removal: removing active voice recorder state because notification was removed.")
+                    activeVoiceRecorderSbn = null
+                    OverlayStateManager.setVoiceRecorderState(null)
                 }
                 val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
                 DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0
@@ -1368,6 +1509,54 @@ class NovaNotificationListener : NotificationListenerService() {
             result = result.substring(0, separatorIndex).trim()
         }
         return result
+    }
+
+    private fun isVoiceRecorderNotification(sbn: StatusBarNotification): Boolean {
+        val packageName = sbn.packageName.lowercase()
+        val notification = sbn.notification
+        val extras = notification.extras ?: Bundle()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
+        val subtext = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.lowercase() ?: ""
+        
+        // 1. Exclude screen recording
+        if (isScreenRecordingNotification(sbn)) return false
+        
+        // 2. Exclude call recording
+        if (title.contains("call recording") || text.contains("recording call")) return false
+
+        // 3. Match package name
+        val isKnownRecorderPkg = packageName.contains("recorder") || 
+                packageName.contains("voicenote") || 
+                packageName.contains("soundrec") || 
+                packageName.contains("audiorec") ||
+                packageName == "com.sec.android.app.voicenote" ||
+                packageName == "com.google.android.apps.recorder" ||
+                packageName == "com.android.soundrecorder" ||
+                packageName == "com.miui.soundrecorder"
+
+        if (!isKnownRecorderPkg) return false
+
+        // 4. Verify actions exist and match recorder semantics
+        val actions = notification.actions ?: return false
+        val actionTitles = actions.map { it.title.toString().lowercase() }
+        
+        val hasPauseOrResume = actionTitles.any { it.contains("pause") || it.contains("resume") || it.contains("record") || it.contains("continue") }
+        val hasStopOrSave = actionTitles.any { it.contains("stop") || it.contains("save") || it.contains("discard") || it.contains("done") || it.contains("finish") }
+        
+        if (hasPauseOrResume && hasStopOrSave) {
+            return true
+        }
+        
+        val hasRecordingKeywords = title.contains("recording") || title.contains("voice memo") || text.contains("recording") || title.contains("dictaphone")
+        val durationRegex = Regex("""\b\d{1,2}:\d{2}(?::\d{2})?\b""")
+        val hasDuration = durationRegex.containsMatchIn(title) || durationRegex.containsMatchIn(text) || durationRegex.containsMatchIn(subtext)
+        
+        if (hasRecordingKeywords && hasDuration) {
+            return true
+        }
+        
+        return false
     }
 }
 

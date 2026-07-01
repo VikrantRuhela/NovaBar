@@ -39,4 +39,7 @@ object NovaIcons {
     val Play = R.drawable.ic_nova_play
     val Pause = R.drawable.ic_nova_pause
     val Reset = R.drawable.ic_nova_reset
+    val VoiceRecorder = R.drawable.ic_nova_mic
+    val Stop = R.drawable.ic_nova_stop
+    val Delete = R.drawable.ic_nova_delete
 }

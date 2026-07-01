@@ -82,6 +82,42 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         repository.updateNotificationsEnabled(enabled)
     }
 
+    fun setVoiceRecorderEnabled(enabled: Boolean) = viewModelScope.launch {
+        repository.updateVoiceRecorderEnabled(enabled)
+    }
+
+    fun setAlwaysOnNovaGuy(enabled: Boolean) = viewModelScope.launch {
+        repository.updateAlwaysOnNovaGuy(enabled)
+    }
+
+    fun setNovaGuyMinInterval(min: Int) = viewModelScope.launch {
+        repository.updateNovaGuyMinInterval(min)
+    }
+
+    fun setNovaGuyMaxInterval(max: Int) = viewModelScope.launch {
+        repository.updateNovaGuyMaxInterval(max)
+    }
+
+    fun setLockscreenGuardianEnabled(enabled: Boolean) = viewModelScope.launch {
+        repository.updateLockscreenGuardianEnabled(enabled)
+    }
+
+    fun setEnableNovaGuyMessages(enabled: Boolean) = viewModelScope.launch {
+        repository.updateEnableNovaGuyMessages(enabled)
+    }
+
+    fun setContextAwareMessagesEnabled(enabled: Boolean) = viewModelScope.launch {
+        repository.updateContextAwareMessagesEnabled(enabled)
+    }
+
+    fun setPillAppearanceStyle(style: String) = viewModelScope.launch {
+        repository.updatePillAppearanceStyle(style)
+    }
+
+    fun setPillCustomColor(color: Int) = viewModelScope.launch {
+        repository.updatePillCustomColor(color)
+    }
+
     fun setColorAdaptationEnabled(enabled: Boolean) = viewModelScope.launch {
         repository.updateColorAdaptationEnabled(enabled)
     }
@@ -216,6 +252,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
 
     fun setPillTextSize(size: Float) = viewModelScope.launch {
         repository.updatePillTextSize(size)
+    }
+
+    fun setAppIconMode(mode: String) = viewModelScope.launch {
+        repository.updateAppIconMode(mode)
     }
 }
 

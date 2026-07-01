@@ -256,12 +256,24 @@ fun NovaBarUi() {
                 is OverlayState.PhoneCall -> "PhoneCall"
                 is OverlayState.Torch -> "Torch"
                 is OverlayState.Hotspot -> "Hotspot"
+                is OverlayState.VoiceRecorder -> "VoiceRecorder"
+                is OverlayState.NovaGuy -> "NovaGuy"
             }
         }.distinctUntilChanged()
     }.collectAsState(initial = "Idle")
     val settings by viewModel.settingsFlow.collectAsState()
     val isDarkBgFromLuminance by viewModel.isDarkBackground.collectAsState()
-    val isDarkBg = if (settings.colorAdaptationEnabled) isDarkBgFromLuminance else androidx.compose.foundation.isSystemInDarkTheme()
+    val baseBackgroundColor = when (settings.pillAppearanceStyle) {
+        "Dark" -> Color(0xFF1C1C1E)
+        "Light" -> Color(0xFFFFFFFF)
+        "Monet" -> MaterialTheme.colorScheme.surfaceVariant
+        "Custom" -> Color(settings.pillCustomColor)
+        else -> { // Auto
+            val isDarkBgAuto = if (settings.colorAdaptationEnabled) isDarkBgFromLuminance else androidx.compose.foundation.isSystemInDarkTheme()
+            if (isDarkBgAuto) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
+        }
+    }
+    val isDarkBg = (0.2126f * baseBackgroundColor.red + 0.7152f * baseBackgroundColor.green + 0.0722f * baseBackgroundColor.blue) <= 0.5f
     val isExpanded by OverlayStateManager.isExpanded.collectAsState()
     val activeList by remember {
         OverlayStateManager.activeActivities.map { list ->
@@ -408,7 +420,6 @@ fun NovaBarUi() {
         label = "ForegroundColor"
     )
 
-    val baseBackgroundColor = if (isDarkBg) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
     val targetColor = baseBackgroundColor.copy(alpha = settings.opacity)
     
     // Apply glass tint composite color
@@ -436,7 +447,8 @@ fun NovaBarUi() {
     )
 
     val systemBarVisible by OverlayStateManager.systemBarVisible.collectAsState()
-    val isStatusBarSyncVisible = if (settings.followStatusBarVisibility) systemBarVisible else true
+    val isLocked by OverlayStateManager.isScreenLocked.collectAsState()
+    val isStatusBarSyncVisible = if (settings.followStatusBarVisibility && !isLocked) systemBarVisible else true
     val showOverlay = (activeStateKey != "Idle" || settings.alwaysOnBar) && isStatusBarSyncVisible
 
 
@@ -453,7 +465,7 @@ fun NovaBarUi() {
     val cameraCutoutModeEnabled = settings.cameraCutoutMode
     val hasCenteredPunchHole by com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.collectAsState()
     
-    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT)
+    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT) && expansionFraction == 0f
     
     val density = LocalContext.current.resources.displayMetrics.density
     val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.collectAsState().value
@@ -647,6 +659,8 @@ fun NovaBarUi() {
                         is OverlayState.PhoneCall -> "PhoneCall"
                         is OverlayState.Torch -> "Torch"
                         is OverlayState.Hotspot -> "Hotspot"
+                        is OverlayState.VoiceRecorder -> "VoiceRecorder"
+                        is OverlayState.NovaGuy -> "NovaGuy"
                     }
                     put(key, initial)
                 }
@@ -664,16 +678,18 @@ fun NovaBarUi() {
                         is OverlayState.PhoneCall -> "PhoneCall"
                         is OverlayState.Torch -> "Torch"
                         is OverlayState.Hotspot -> "Hotspot"
+                        is OverlayState.VoiceRecorder -> "VoiceRecorder"
+                        is OverlayState.NovaGuy -> "NovaGuy"
                     }
                     activeStateMap[key] = state
                 }
             }
 
             @Composable
-            fun RenderSegmentContent(segment: SplitSegment?) {
-                val state = activeStateMap[activeStateKey]
+            fun RenderSegmentContent(segment: SplitSegment?, key: String) {
+                val state = activeStateMap[key]
                 if (state != null) {
-                    val stateTargetState = when (activeStateKey) {
+                    val stateTargetState = when (key) {
                         "Media" -> {
                             when (settings.defaultPresentationMode) {
                                 "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
@@ -776,12 +792,41 @@ fun NovaBarUi() {
                                     }
                                 )
                             }
+                            is OverlayState.VoiceRecorder -> {
+                                VoiceRecorderView(
+                                    state = state.data,
+                                    currentState = stateTargetState,
+                                    color = foregroundColor,
+                                    textSizeOffset = textSizeOffset,
+                                    splitSegment = segment
+                                ) {
+                                    userInteractionTick = System.currentTimeMillis()
+                                }
+                            }
                             is OverlayState.Idle -> {
                                 if (settings.alwaysOnBar) {
                                     AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset, segment)
                                 } else {
                                     Row(modifier = Modifier.padding(horizontal = 14.dp)) {
                                         Text("Ready", color = foregroundColor, fontSize = (12f + textSizeOffset).sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                            is OverlayState.NovaGuy -> {
+                                if (stateTargetState == NowBarState.EXPANDED) {
+                                    NovaGuyExpandedView(foregroundColor)
+                                } else {
+                                    val currentWidth = if (segment == SplitSegment.LEFT) animatedLeftSegmentWidth else animatedRightSegmentWidth
+                                    if (segment == SplitSegment.LEFT) {
+                                        NovaGuyCompactView(foregroundColor, currentWidth)
+                                    } else {
+                                        RightSegmentContextView(
+                                            isLocked = isLocked,
+                                            timeFormat = settings.timeFormat,
+                                            showSeconds = settings.showSeconds,
+                                            color = foregroundColor,
+                                            textSizeOffset = textSizeOffset
+                                        )
                                     }
                                 }
                             }
@@ -847,9 +892,11 @@ fun NovaBarUi() {
                             } while (event.changes.any { it.pressed })
                             
                             if (dragX > 60f) {
+                                Log.d("NovaBar-SwipeDebug", "1. Swipe Right gesture detected. dragX=$dragX")
                                 OverlayStateManager.swipeRight()
                                 userInteractionTick = System.currentTimeMillis()
                             } else if (dragX < -60f) {
+                                Log.d("NovaBar-SwipeDebug", "1. Swipe Left gesture detected. dragX=$dragX")
                                 OverlayStateManager.swipeLeft()
                                 userInteractionTick = System.currentTimeMillis()
                             }
@@ -861,6 +908,9 @@ fun NovaBarUi() {
                                 val currentStateObj = viewModel.activeState.value
                                 var canExpand = true
                                 if (currentStateObj is OverlayState.Hotspot && !currentStateObj.data.isDisableSupported) {
+                                    canExpand = false
+                                }
+                                if (currentStateObj is OverlayState.NovaGuy && !settings.enableNovaGuyMessages) {
                                     canExpand = false
                                 }
                                 if (canExpand) {
@@ -877,11 +927,31 @@ fun NovaBarUi() {
                 }
             }
 
-            val isMultiDashboard = activeActivities.size > 1 && isExpanded
+            val isMultiDashboard = activeActivities.size > 1 && (isExpanded || expansionFraction > 0.01f)
             val containerAlpha = 1f - expansionFraction
-            val currentBorderColor = if (isMultiDashboard) borderColor.copy(alpha = containerAlpha) else borderColor
-            val currentBorderThickness = if (isMultiDashboard) borderThickness * containerAlpha else borderThickness
-            val currentBackgroundColor = if (isMultiDashboard) backgroundColor.copy(alpha = backgroundColor.alpha * containerAlpha) else backgroundColor
+            val currentBorderColor = if (isMultiDashboard) {
+                borderColor.copy(alpha = containerAlpha)
+            } else if (isSplitLayout) {
+                borderColor
+            } else {
+                Color.Transparent
+            }
+
+            val currentBorderThickness = if (isMultiDashboard) {
+                borderThickness * containerAlpha
+            } else if (isSplitLayout) {
+                borderThickness
+            } else {
+                0.dp
+            }
+
+            val currentBackgroundColor = if (isMultiDashboard) {
+                backgroundColor.copy(alpha = backgroundColor.alpha * containerAlpha)
+            } else if (isSplitLayout) {
+                backgroundColor
+            } else {
+                Color.Transparent
+            }
             val currentCornerRadius = animatedCornerRadius
 
             Box(
@@ -900,69 +970,6 @@ fun NovaBarUi() {
                     .border(currentBorderThickness, currentBorderColor, RoundedCornerShape(currentCornerRadius))
                     .clip(RoundedCornerShape(currentCornerRadius))
                     .background(currentBackgroundColor)
-                    .drawBehind {
-                        if (activeStateKey == "Charging" && !isMultiDashboard) {
-                            val fillFraction = (animatedPercent / 100f).coerceIn(0f, 1f)
-                            if (fillFraction > 0f) {
-                                val fillThemeColor = Color(0xFF34C759)
-                                val drawWidth = size.width
-                                val drawHeight = size.height
-                                val fillWidth = drawWidth * fillFraction
-
-                                val steps = 30
-
-                                // Layer 1: alpha = 0.18, amplitude = 3dp
-                                val amplitude1 = 3.dp.toPx()
-                                val frequency1 = (2f * Math.PI.toFloat()) / drawHeight
-                                val fillPath1 = Path()
-                                fillPath1.moveTo(0f, 0f)
-                                val xAtZero1 = fillWidth + kotlin.math.sin(0.0 - chargingWavePhase.toDouble()).toFloat() * amplitude1
-                                fillPath1.lineTo(xAtZero1.coerceIn(0f, drawWidth), 0f)
-                                for (i in 0..steps) {
-                                    val y = (i.toFloat() / steps) * drawHeight
-                                    val x = fillWidth + kotlin.math.sin(y * frequency1 - chargingWavePhase.toDouble()).toFloat() * amplitude1
-                                    fillPath1.lineTo(x.coerceIn(0f, drawWidth), y)
-                                }
-                                fillPath1.lineTo(0f, drawHeight)
-                                fillPath1.close()
-                                drawPath(path = fillPath1, color = fillThemeColor.copy(alpha = 0.18f))
-
-                                // Layer 2: alpha = 0.10, amplitude = 2dp
-                                val amplitude2 = 2.dp.toPx()
-                                val frequency2 = (2f * Math.PI.toFloat()) / (drawHeight * 0.8f)
-                                val phaseOffset2 = 2f
-                                val fillPath2 = Path()
-                                fillPath2.moveTo(0f, 0f)
-                                val xAtZero2 = fillWidth + kotlin.math.sin(0.0 - (chargingWavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
-                                fillPath2.lineTo(xAtZero2.coerceIn(0f, drawWidth), 0f)
-                                for (i in 0..steps) {
-                                    val y = (i.toFloat() / steps) * drawHeight
-                                    val x = fillWidth + kotlin.math.sin(y * frequency2 - (chargingWavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
-                                    fillPath2.lineTo(x.coerceIn(0f, drawWidth), y)
-                                }
-                                fillPath2.lineTo(0f, drawHeight)
-                                fillPath2.close()
-                                drawPath(path = fillPath2, color = fillThemeColor.copy(alpha = 0.10f))
-
-                                // Layer 3: alpha = 0.05, amplitude = 1dp
-                                val amplitude3 = 1.dp.toPx()
-                                val frequency3 = (2f * Math.PI.toFloat()) / (drawHeight * 1.2f)
-                                val phaseOffset3 = 4f
-                                val fillPath3 = Path()
-                                fillPath3.moveTo(0f, 0f)
-                                val xAtZero3 = fillWidth + kotlin.math.sin(0.0 - (chargingWavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
-                                fillPath3.lineTo(xAtZero3.coerceIn(0f, drawWidth), 0f)
-                                for (i in 0..steps) {
-                                    val y = (i.toFloat() / steps) * drawHeight
-                                    val x = fillWidth + kotlin.math.sin(y * frequency3 - (chargingWavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
-                                    fillPath3.lineTo(x.coerceIn(0f, drawWidth), y)
-                                }
-                                fillPath3.lineTo(0f, drawHeight)
-                                fillPath3.close()
-                                drawPath(path = fillPath3, color = fillThemeColor.copy(alpha = 0.05f))
-                            }
-                        }
-                    }
                     .then(gesturesModifier),
                 contentAlignment = Alignment.Center
             ) {
@@ -979,7 +986,9 @@ fun NovaBarUi() {
                                 is OverlayState.Charging -> "Charging"
                                 is OverlayState.PhoneCall -> "PhoneCall"
                                 is OverlayState.Notification -> "Notification"
+                                is OverlayState.VoiceRecorder -> "VoiceRecorder"
                                 is OverlayState.Idle -> "Idle"
+                                is OverlayState.NovaGuy -> "NovaGuy"
                             }
 
                             key(activityKey) {
@@ -990,6 +999,7 @@ fun NovaBarUi() {
                                         val h: Int = when (state) {
                                             is OverlayState.Navigation -> 56
                                             is OverlayState.Media -> 52
+                                            is OverlayState.VoiceRecorder -> 52
                                             else -> 48
                                         }
                                         h
@@ -1011,7 +1021,9 @@ fun NovaBarUi() {
                                                 is OverlayState.Charging -> "Charging"
                                                 is OverlayState.PhoneCall -> "PhoneCall"
                                                 is OverlayState.Notification -> "Notification"
+                                                is OverlayState.VoiceRecorder -> "VoiceRecorder"
                                                 is OverlayState.Idle -> "Idle"
+                                                is OverlayState.NovaGuy -> "NovaGuy"
                                             }
                                             actKey == expandedActivityKey
                                         }
@@ -1027,6 +1039,7 @@ fun NovaBarUi() {
                                     when (activity) {
                                         is OverlayState.Navigation -> 56.dp
                                         is OverlayState.Media -> 52.dp
+                                        is OverlayState.VoiceRecorder -> 52.dp
                                         else -> 48.dp
                                     }
                                 } else {
@@ -1052,7 +1065,7 @@ fun NovaBarUi() {
                                         label = "animatedCardCornerRadius_${activityKey}"
                                     )
 
-                                    val cardBackgroundColor = if (isDarkBg) Color(0xFF1C1C1E).copy(alpha = settings.opacity) else Color(0xFFFFFFFF).copy(alpha = settings.opacity)
+                                    val cardBackgroundColor = baseBackgroundColor.copy(alpha = settings.opacity)
 
                                     Box(
                                         modifier = Modifier
@@ -1062,7 +1075,7 @@ fun NovaBarUi() {
                                             .shadow(elevation = 2.dp, shape = RoundedCornerShape(animatedCardCornerRadius))
                                             .clip(RoundedCornerShape(animatedCardCornerRadius))
                                             .background(cardBackgroundColor)
-                                            .clickable(enabled = expandedActivityKey == null) {
+                                            .clickable(enabled = expandedActivityKey == null && activityKey != "NovaGuy") {
                                                 OverlayStateManager.expandedActivityKey.value = activityKey
                                                 userInteractionTick = System.currentTimeMillis()
                                             }
@@ -1161,7 +1174,19 @@ fun NovaBarUi() {
                                                         }
                                                     )
                                                 }
-                                                is OverlayState.Idle -> {
+                                                 is OverlayState.VoiceRecorder -> {
+                                                     VoiceRecorderView(
+                                                         state = activity.data,
+                                                         currentState = presentationMode,
+                                                         color = foregroundColor,
+                                                         textSizeOffset = textSizeOffset,
+                                                         splitSegment = null,
+                                                         isDashboardCard = true
+                                                     ) {
+                                                         userInteractionTick = System.currentTimeMillis()
+                                                     }
+                                                 }
+                                                 is OverlayState.Idle -> {
                                                     if (settings.alwaysOnBar) {
                                                         AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset, null)
                                                     } else {
@@ -1170,6 +1195,116 @@ fun NovaBarUi() {
                                                         }
                                                     }
                                                 }
+                                                is OverlayState.NovaGuy -> {
+                                                     val selectedMessage by OverlayStateManager.selectedNovaGuyMessage.collectAsState()
+                                                     val context = androidx.compose.ui.platform.LocalContext.current
+                                                     val messageText = remember(selectedMessage) {
+                                                         selectedMessage?.let { context.getString(it.textResId) } ?: run {
+                                                             val msg = com.novabar.app.domain.NovaGuyMessageProvider.selectRandomMessage(
+                                                                 com.novabar.app.domain.DeviceContext(
+                                                                     hourOfDay = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY),
+                                                                     isCharging = false,
+                                                                     batteryPercentage = 100,
+                                                                     isMusicPlaying = false
+                                                                 ),
+                                                                 settings.contextAwareMessagesEnabled
+                                                             )
+                                                             context.getString(msg.textResId)
+                                                         }
+                                                     }
+
+                                                     val eyeOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+                                                     LaunchedEffect(Unit) {
+                                                         while (true) {
+                                                             delay(kotlin.random.Random.nextLong(5000, 10000))
+                                                             val glanceDirection = listOf(-6f, 6f).random()
+                                                             eyeOffset.animateTo(
+                                                                 targetValue = glanceDirection,
+                                                                 animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                                                             )
+                                                             delay(kotlin.random.Random.nextLong(1000, 2000))
+                                                             eyeOffset.animateTo(
+                                                                 targetValue = 0f,
+                                                                 animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                                                             )
+                                                         }
+                                                     }
+
+                                                     Row(
+                                                         modifier = Modifier
+                                                             .fillMaxSize()
+                                                             .padding(horizontal = 16.dp),
+                                                         verticalAlignment = Alignment.CenterVertically
+                                                     ) {
+                                                         Box(
+                                                             modifier = Modifier
+                                                                 .width(44.dp)
+                                                                 .fillMaxHeight(),
+                                                             contentAlignment = Alignment.Center
+                                                         ) {
+                                                             Canvas(modifier = Modifier.size(width = 40.dp, height = 20.dp)) {
+                                                                  val density = this.density
+                                                                  val offsetPx = eyeOffset.value * density
+                                                                  
+                                                                  val centerY = size.height / 2f
+                                                                  val centerX = size.width / 2f
+                                                                  
+                                                                  val eyeSpacingPx = 14.dp.toPx()
+                                                                  val eyeWidthPx = 3.dp.toPx()
+                                                                  val eyeHeightPx = 5.dp.toPx()
+                                                                  val eyeCornerRadiusPx = 1.5f.dp.toPx()
+                                                                  
+                                                                  val leftEyeX = centerX - eyeSpacingPx / 2f + offsetPx
+                                                                  val rightEyeX = centerX + eyeSpacingPx / 2f + offsetPx
+                                                                  
+                                                                  val gapPx = 1.5f.dp.toPx()
+                                                                  val connectorThicknessPx = 1.5f.dp.toPx()
+                                                                  
+                                                                  val leftInnerEdgeX = leftEyeX + (eyeWidthPx / 2f)
+                                                                  val rightInnerEdgeX = rightEyeX - (eyeWidthPx / 2f)
+                                                                  
+                                                                  val connectorStartX = leftInnerEdgeX + gapPx + (connectorThicknessPx / 2f)
+                                                                  val connectorEndX = rightInnerEdgeX - gapPx - (connectorThicknessPx / 2f)
+                                                                  
+                                                                  // Draw floating connecting line with rounded ends and small symmetrical gaps
+                                                                  drawLine(
+                                                                      color = foregroundColor.copy(alpha = 0.5f),
+                                                                      start = Offset(connectorStartX, centerY),
+                                                                      end = Offset(connectorEndX, centerY),
+                                                                      strokeWidth = connectorThicknessPx,
+                                                                      cap = androidx.compose.ui.graphics.StrokeCap.Round
+                                                                  )
+                                                                  
+                                                                  // Draw left capsule eye
+                                                                  drawRoundRect(
+                                                                      color = foregroundColor,
+                                                                      topLeft = Offset(leftEyeX - eyeWidthPx / 2f, centerY - eyeHeightPx / 2f),
+                                                                      size = androidx.compose.ui.geometry.Size(eyeWidthPx, eyeHeightPx),
+                                                                      cornerRadius = androidx.compose.ui.geometry.CornerRadius(eyeCornerRadiusPx, eyeCornerRadiusPx)
+                                                                  )
+                                                                  
+                                                                  // Draw right capsule eye
+                                                                  drawRoundRect(
+                                                                      color = foregroundColor,
+                                                                      topLeft = Offset(rightEyeX - eyeWidthPx / 2f, centerY - eyeHeightPx / 2f),
+                                                                      size = androidx.compose.ui.geometry.Size(eyeWidthPx, eyeHeightPx),
+                                                                      cornerRadius = androidx.compose.ui.geometry.CornerRadius(eyeCornerRadiusPx, eyeCornerRadiusPx)
+                                                                  )
+                                                              }
+                                                         }
+
+                                                         Spacer(modifier = Modifier.width(16.dp))
+
+                                                         Text(
+                                                             text = messageText,
+                                                             color = foregroundColor,
+                                                             fontSize = (12f + textSizeOffset).sp,
+                                                             fontWeight = FontWeight.Medium,
+                                                             textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                                                             modifier = Modifier.weight(1f)
+                                                         )
+                                                     }
+                                                 }
                                             }
                                         }
 
@@ -1202,6 +1337,7 @@ fun NovaBarUi() {
                     }
                 } else {
                     if (isSplitLayout) {
+                        val lastTransitionTypeSplit by OverlayStateManager.lastTransitionType.collectAsState()
                         Row(
                             modifier = Modifier.fillMaxSize(),
                             verticalAlignment = Alignment.CenterVertically
@@ -1212,7 +1348,30 @@ fun NovaBarUi() {
                                     .fillMaxHeight(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                RenderSegmentContent(SplitSegment.LEFT)
+                                AnimatedContent(
+                                    targetState = activeStateKey,
+                                    transitionSpec = {
+                                        val duration = 350
+                                        val transType = OverlayStateManager.lastTransitionType.value
+                                        val keyFrom = initialState
+                                        val keyTo = targetState
+                                        Log.d("NovaBar-SwipeDebug", "Split Left transitionSpec evaluated. targetState: '$keyFrom' -> '$keyTo'. transType: '$transType'")
+                                        if (transType == OverlayStateManager.TransitionType.SWIPE_LEFT) {
+                                            androidx.compose.animation.slideInHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { width -> width } + fadeIn(animationSpec = tween(duration)) togetherWith
+                                            androidx.compose.animation.slideOutHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> -width } + fadeOut(animationSpec = tween(duration))
+                                        } else if (transType == OverlayStateManager.TransitionType.SWIPE_RIGHT) {
+                                            androidx.compose.animation.slideInHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { width -> -width } + fadeIn(animationSpec = tween(duration)) togetherWith
+                                            androidx.compose.animation.slideOutHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> width } + fadeOut(animationSpec = tween(duration))
+                                        } else {
+                                            slideInVertically(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { height -> (height * 0.7f).roundToInt() } + fadeIn(animationSpec = tween(duration)) togetherWith
+                                            slideOutVertically(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { height -> (-height * 0.7f).roundToInt() } + fadeOut(animationSpec = tween(duration))
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) { key ->
+                                    RenderSegmentContent(SplitSegment.LEFT, key)
+                                }
                             }
                             Spacer(modifier = Modifier.width(gapWidth))
                             Box(
@@ -1221,11 +1380,302 @@ fun NovaBarUi() {
                                     .fillMaxHeight(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                RenderSegmentContent(SplitSegment.RIGHT)
+                                AnimatedContent(
+                                    targetState = activeStateKey,
+                                    transitionSpec = {
+                                        val duration = 350
+                                        val transType = OverlayStateManager.lastTransitionType.value
+                                        val keyFrom = initialState
+                                        val keyTo = targetState
+                                        Log.d("NovaBar-SwipeDebug", "Split Right transitionSpec evaluated. targetState: '$keyFrom' -> '$keyTo'. transType: '$transType'")
+                                        if (transType == OverlayStateManager.TransitionType.SWIPE_LEFT) {
+                                            androidx.compose.animation.slideInHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { width -> width } + fadeIn(animationSpec = tween(duration)) togetherWith
+                                            androidx.compose.animation.slideOutHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> -width } + fadeOut(animationSpec = tween(duration))
+                                        } else if (transType == OverlayStateManager.TransitionType.SWIPE_RIGHT) {
+                                            androidx.compose.animation.slideInHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { width -> -width } + fadeIn(animationSpec = tween(duration)) togetherWith
+                                            androidx.compose.animation.slideOutHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> width } + fadeOut(animationSpec = tween(duration))
+                                        } else {
+                                            slideInVertically(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { height -> (height * 0.7f).roundToInt() } + fadeIn(animationSpec = tween(duration)) togetherWith
+                                            slideOutVertically(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { height -> (-height * 0.7f).roundToInt() } + fadeOut(animationSpec = tween(duration))
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) { key ->
+                                    RenderSegmentContent(SplitSegment.RIGHT, key)
+                                }
                             }
                         }
                     } else {
-                        RenderSegmentContent(null)
+                        val lastTransitionType by OverlayStateManager.lastTransitionType.collectAsState()
+                        var previousActiveStateKey by remember { mutableStateOf(activeStateKey) }
+                        LaunchedEffect(activeStateKey) {
+                            Log.d("NovaBar-SwipeDebug", "4. activeStateKey before swipe/change: '$previousActiveStateKey', 5. activeStateKey after swipe/change: '$activeStateKey'")
+                            previousActiveStateKey = activeStateKey
+                            delay(50L)
+                            val rawTransType = OverlayStateManager.lastTransitionType.value
+                            OverlayStateManager.resetTransitionType()
+                            Log.d("NovaBar-SwipeDebug", "Reset transition type: beforeReset='$rawTransType', afterReset='${OverlayStateManager.lastTransitionType.value}'")
+                        }
+
+                        AnimatedContent(
+                            targetState = activeStateKey,
+                            transitionSpec = {
+                                val duration = 350
+                                val transType = OverlayStateManager.lastTransitionType.value
+                                val keyFrom = initialState
+                                val keyTo = targetState
+                                Log.d("NovaBar-SwipeDebug", "6. transitionSpec evaluated. targetState: '$keyFrom' -> '$keyTo'. transType collected state: '$lastTransitionType', raw flow state: '$transType'")
+                                
+                                when (transType) {
+                                    OverlayStateManager.TransitionType.SWIPE_LEFT -> {
+                                        Log.d("NovaBar-SwipeDebug", "7/8. SWIPE_LEFT transition selected and NOT skipped.")
+                                        (slideInHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { width -> width } + 
+                                         fadeIn(animationSpec = tween(duration))) togetherWith
+                                        (slideOutHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> -width } + 
+                                         fadeOut(animationSpec = tween(duration)))
+                                    }
+                                    OverlayStateManager.TransitionType.SWIPE_RIGHT -> {
+                                        Log.d("NovaBar-SwipeDebug", "7/8. SWIPE_RIGHT transition selected and NOT skipped.")
+                                        (slideInHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { width -> -width } + 
+                                         fadeIn(animationSpec = tween(duration))) togetherWith
+                                        (slideOutHorizontally(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> width } + 
+                                         fadeOut(animationSpec = tween(duration)))
+                                    }
+                                    else -> {
+                                        Log.d("NovaBar-SwipeDebug", "7/8. AUTOMATIC (vertical cascade) transition selected and NOT skipped.")
+                                        (slideInVertically(animationSpec = tween(duration, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) { height -> (height * 0.7f).roundToInt() } + 
+                                         fadeIn(animationSpec = tween(duration))) togetherWith
+                                        (slideOutVertically(animationSpec = tween(duration, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { height -> (-height * 0.7f).roundToInt() } + 
+                                         fadeOut(animationSpec = tween(duration)))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
+                        ) { key ->
+                            val state = activeStateMap[key]
+                            if (state != null) {
+                                val stateTargetState = when (state) {
+                                    is OverlayState.Media -> {
+                                        when (settings.defaultPresentationMode) {
+                                            "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                                            "Expanded" -> NowBarState.EXPANDED
+                                            else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
+                                        }
+                                    }
+                                    is OverlayState.Charging -> {
+                                        when (settings.defaultPresentationMode) {
+                                            "Minimized" -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                                            "Expanded" -> NowBarState.EXPANDED
+                                            else -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.COMPACT
+                                        }
+                                    }
+                                    else -> {
+                                        when (settings.defaultPresentationMode) {
+                                            "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                                            "Expanded" -> NowBarState.EXPANDED
+                                            else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
+                                        }
+                                    }
+                                }
+
+                                val stateTargetWidth = when (stateTargetState) {
+                                    NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
+                                    NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
+                                    NowBarState.EXPANDED -> 290.dp
+                                }
+                                val stateTargetHeight = when (stateTargetState) {
+                                    NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
+                                    NowBarState.COMPACT -> (44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp)
+                                    NowBarState.EXPANDED -> 205.dp
+                                }
+
+                                val stateWidth by animateDpAsState(
+                                    targetValue = stateTargetWidth,
+                                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                    label = "stateWidth"
+                                )
+                                val stateHeight by animateDpAsState(
+                                    targetValue = stateTargetHeight,
+                                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                    label = "stateHeight"
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .requiredSize(stateWidth, stateHeight)
+                                        .onGloballyPositioned { coordinates ->
+                                            if (state == activeStateMap[activeStateKey]) {
+                                                val rect = coordinates.boundsInWindow()
+                                                OverlayStateManager.pillBounds.value = android.graphics.Rect(
+                                                    rect.left.roundToInt(),
+                                                    rect.top.roundToInt(),
+                                                    rect.right.roundToInt(),
+                                                    rect.bottom.roundToInt()
+                                                )
+                                            }
+                                        }
+                                        .border(borderThickness, borderColor, RoundedCornerShape(animatedCornerRadius))
+                                        .clip(RoundedCornerShape(animatedCornerRadius))
+                                        .background(backgroundColor)
+                                        .drawBehind {
+                                            if (state is OverlayState.Charging) {
+                                                val fillFraction = (animatedPercent / 100f).coerceIn(0f, 1f)
+                                                if (fillFraction > 0f) {
+                                                    val fillThemeColor = Color(0xFF34C759)
+                                                    val drawWidth = size.width
+                                                    val drawHeight = size.height
+                                                    val fillWidth = drawWidth * fillFraction
+
+                                                    val steps = 30
+                                                    val amplitude1 = 3.dp.toPx()
+                                                    val frequency1 = (2f * Math.PI.toFloat()) / drawHeight
+                                                    val fillPath1 = Path()
+                                                    fillPath1.moveTo(0f, 0f)
+                                                    val xAtZero1 = fillWidth + kotlin.math.sin(0.0 - chargingWavePhase.toDouble()).toFloat() * amplitude1
+                                                    fillPath1.lineTo(xAtZero1.coerceIn(0f, drawWidth), 0f)
+                                                    for (i in 0..steps) {
+                                                        val y = (i.toFloat() / steps) * drawHeight
+                                                        val x = fillWidth + kotlin.math.sin(y * frequency1 - chargingWavePhase.toDouble()).toFloat() * amplitude1
+                                                        fillPath1.lineTo(x.coerceIn(0f, drawWidth), y)
+                                                    }
+                                                    fillPath1.lineTo(0f, drawHeight)
+                                                    fillPath1.close()
+                                                    drawPath(path = fillPath1, color = fillThemeColor.copy(alpha = 0.18f))
+
+                                                    val amplitude2 = 2.dp.toPx()
+                                                    val frequency2 = (2f * Math.PI.toFloat()) / (drawHeight * 0.8f)
+                                                    val phaseOffset2 = 2f
+                                                    val fillPath2 = Path()
+                                                    fillPath2.moveTo(0f, 0f)
+                                                    val xAtZero2 = fillWidth + kotlin.math.sin(0.0 - (chargingWavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
+                                                    fillPath2.lineTo(xAtZero2.coerceIn(0f, drawWidth), 0f)
+                                                    for (i in 0..steps) {
+                                                        val y = (i.toFloat() / steps) * drawHeight
+                                                        val x = fillWidth + kotlin.math.sin(y * frequency2 - (chargingWavePhase + phaseOffset2).toDouble()).toFloat() * amplitude2
+                                                        fillPath2.lineTo(x.coerceIn(0f, drawWidth), y)
+                                                    }
+                                                    fillPath2.lineTo(0f, drawHeight)
+                                                    fillPath2.close()
+                                                    drawPath(path = fillPath2, color = fillThemeColor.copy(alpha = 0.10f))
+
+                                                    val amplitude3 = 1.dp.toPx()
+                                                    val frequency3 = (2f * Math.PI.toFloat()) / (drawHeight * 1.2f)
+                                                    val phaseOffset3 = 4f
+                                                    val fillPath3 = Path()
+                                                    fillPath3.moveTo(0f, 0f)
+                                                    val xAtZero3 = fillWidth + kotlin.math.sin(0.0 - (chargingWavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
+                                                    fillPath3.lineTo(xAtZero3.coerceIn(0f, drawWidth), 0f)
+                                                    for (i in 0..steps) {
+                                                        val y = (i.toFloat() / steps) * drawHeight
+                                                        val x = fillWidth + kotlin.math.sin(y * frequency3 - (chargingWavePhase + phaseOffset3).toDouble()).toFloat() * amplitude3
+                                                        fillPath3.lineTo(x.coerceIn(0f, drawWidth), y)
+                                                    }
+                                                    fillPath3.lineTo(0f, drawHeight)
+                                                    fillPath3.close()
+                                                    drawPath(path = fillPath3, color = fillThemeColor.copy(alpha = 0.05f))
+                                                }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    when (state) {
+                                        is OverlayState.PhoneCall -> PhoneCallView(state.data, stateTargetState, foregroundColor, textSizeOffset, null) {
+                                            userInteractionTick = System.currentTimeMillis()
+                                        }
+                                        is OverlayState.Charging -> ChargingPill(
+                                            state = state.data,
+                                            currentState = stateTargetState,
+                                            color = foregroundColor,
+                                            textSizeOffset = textSizeOffset,
+                                            contentAlpha = contentAlpha.value,
+                                            splitSegment = null
+                                        )
+                                        is OverlayState.Notification -> NotificationView(
+                                            state.data, stateTargetState, viewModel, foregroundColor, textSizeOffset, splitSegment = null
+                                        )
+                                        is OverlayState.Timer -> TimerView(state.data, stateTargetState, foregroundColor, settings.showSeconds, textSizeOffset, splitSegment = null) {
+                                            userInteractionTick = System.currentTimeMillis()
+                                        }
+                                        is OverlayState.Stopwatch -> StopwatchView(state.data, stateTargetState, foregroundColor, settings.showSeconds, textSizeOffset, splitSegment = null) {
+                                            userInteractionTick = System.currentTimeMillis()
+                                        }
+                                        is OverlayState.Navigation -> NavigationView(state.data, stateTargetState, foregroundColor, settings.timeFormat, textSizeOffset, splitSegment = null)
+                                        is OverlayState.Media -> {
+                                            MediaView(
+                                                state = state.data,
+                                                currentState = stateTargetState,
+                                                color = foregroundColor,
+                                                albumArtCornerRadius = settings.albumArtCornerRadius,
+                                                visualizerStyle = settings.visualizerStyle,
+                                                visualizerSensitivity = settings.visualizerSensitivity,
+                                                progressVisibility = settings.progressVisibility,
+                                                splitSegment = null,
+                                                textSizeOffset = textSizeOffset,
+                                                onSeekTo = { posMs ->
+                                                    com.novabar.app.services.NovaNotificationListener.seekTo(posMs)
+                                                },
+                                                onInteraction = {
+                                                    userInteractionTick = System.currentTimeMillis()
+                                                }
+                                            )
+                                        }
+                                        is OverlayState.Torch -> {
+                                            TorchView(
+                                                state = state.data,
+                                                currentState = stateTargetState,
+                                                color = foregroundColor,
+                                                textSizeOffset = textSizeOffset,
+                                                splitSegment = null,
+                                                onInteraction = {
+                                                    userInteractionTick = System.currentTimeMillis()
+                                                }
+                                            )
+                                        }
+                                        is OverlayState.Hotspot -> {
+                                            HotspotView(
+                                                state = state.data,
+                                                currentState = stateTargetState,
+                                                color = foregroundColor,
+                                                textSizeOffset = textSizeOffset,
+                                                splitSegment = null,
+                                                onTurnOffClick = {
+                                                    viewModel.disableHotspot(context)
+                                                }
+                                            )
+                                        }
+                                        is OverlayState.VoiceRecorder -> {
+                                            VoiceRecorderView(
+                                                state = state.data,
+                                                currentState = stateTargetState,
+                                                color = foregroundColor,
+                                                textSizeOffset = textSizeOffset,
+                                                splitSegment = null
+                                            ) {
+                                                userInteractionTick = System.currentTimeMillis()
+                                            }
+                                        }
+                                        is OverlayState.Idle -> {
+                                            if (settings.alwaysOnBar) {
+                                                AlwaysOnView(settings.alwaysOnConfig, settings.timeFormat, settings.showSeconds, foregroundColor, textSizeOffset, null)
+                                            } else {
+                                                Row(modifier = Modifier.padding(horizontal = 14.dp)) {
+                                                    Text("Ready", color = foregroundColor, fontSize = (12f + textSizeOffset).sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                        is OverlayState.NovaGuy -> {
+                                            if (stateTargetState == NowBarState.EXPANDED) {
+                                                NovaGuyExpandedView(foregroundColor)
+                                            } else {
+                                                NovaGuyCompactView(foregroundColor, stateWidth)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2169,6 +2619,364 @@ fun StopwatchDisplayText(
     )
 }
 
+// --- AUDIO VISUALIZER ---
+@Composable
+fun AudioVisualizer(
+    isAnimating: Boolean,
+    modifier: Modifier = Modifier,
+    barCount: Int = 12,
+    barColor: Color = Color.White,
+    maxBarHeight: androidx.compose.ui.unit.Dp = 32.dp,
+    barWidth: androidx.compose.ui.unit.Dp = 3.dp,
+    barSpacing: androidx.compose.ui.unit.Dp = 2.dp,
+    amplitudes: List<Float>? = null
+) {
+    val transition = rememberInfiniteTransition(label = "audio_visualizer")
+    val barScale = (0 until barCount).map { index ->
+        if (isAnimating) {
+            val realAmp = amplitudes?.getOrNull(index)
+            if (realAmp != null && realAmp > 0f) {
+                realAmp.coerceIn(0.1f, 1f)
+            } else {
+                val duration = 600 + (index * 83) % 400
+                val delay = (index * 113) % 250
+                val anim = transition.animateFloat(
+                    initialValue = 0.1f,
+                    targetValue = 0.35f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(duration, delayMillis = delay, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "bar_$index"
+                )
+                anim.value
+            }
+        } else {
+            0.1f
+        }
+    }
+
+    Row(
+        modifier = modifier.height(maxBarHeight),
+        horizontalArrangement = Arrangement.spacedBy(barSpacing),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        barScale.forEach { scale ->
+            Box(
+                modifier = Modifier
+                    .width(barWidth)
+                    .height(maxBarHeight * scale)
+                    .background(barColor, RoundedCornerShape(1.5.dp))
+            )
+        }
+    }
+}
+
+// --- BLINKING MIC ICON ---
+@Composable
+fun BlinkingMicIcon(
+    isRecording: Boolean,
+    color: Color,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "mic_blink")
+    val alpha by if (isRecording) {
+        transition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "alpha"
+        )
+    } else {
+        remember { mutableStateOf(0.7f) }
+    }
+
+    Icon(
+        painter = painterResource(id = NovaIcons.VoiceRecorder),
+        contentDescription = "Voice Recorder Icon",
+        tint = color.copy(alpha = alpha),
+        modifier = modifier.size(size)
+    )
+}
+
+// --- VOICE RECORDER VIEW ---
+@Composable
+fun VoiceRecorderView(
+    state: VoiceRecorderState,
+    currentState: NowBarState,
+    color: Color,
+    textSizeOffset: Float,
+    contentAlpha: Float = 1f,
+    controlsAlpha: Float = 1f,
+    controlsOffsetY: androidx.compose.ui.unit.Dp = 0.dp,
+    splitSegment: SplitSegment? = null,
+    isDashboardCard: Boolean = false,
+    onInteraction: () -> Unit
+) {
+    val buttonsEnabled = state.hasPause || state.hasResume || state.hasStop
+    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 6: Compose Recomposition | elapsedTime=${state.durationMs} | isRecording=${state.isRecording} | buttonsEnabled=$buttonsEnabled | pauseIntent != null=${state.pauseIntent != null} | resumeIntent != null=${state.resumeIntent != null} | stopIntent != null=${state.stopIntent != null} | currentState=$currentState | isDashboardCard=$isDashboardCard")
+
+    val sizeOffset = textSizeOffset
+
+    // 1. SplitSegment segment (for split compact view)
+    if (splitSegment != null) {
+        if (splitSegment == SplitSegment.LEFT) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                BlinkingMicIcon(
+                    isRecording = state.isRecording,
+                    color = color,
+                    size = if (currentState == NowBarState.MINIMIZED) 14.dp else 16.dp
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val totalSecs = state.durationMs / 1000
+                val mins = (totalSecs % 3600) / 60
+                val secs = totalSecs % 60
+                val formattedTime = String.format("%02d:%02d", mins, secs)
+                Text(
+                    text = formattedTime,
+                    color = color,
+                    fontSize = (11f + sizeOffset).sp,
+                    fontWeight = if (currentState == NowBarState.MINIMIZED) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+        }
+        return
+    }
+
+    // Helper to format duration: "mm:ss" or "hh:mm:ss"
+    fun formatVoiceRecorderDuration(ms: Long): String {
+        val totalSecs = ms / 1000
+        val hrs = totalSecs / 3600
+        val mins = (totalSecs % 3600) / 60
+        val secs = totalSecs % 60
+        return if (hrs > 0) {
+            String.format("%02d:%02d:%02d", hrs, mins, secs)
+        } else {
+            String.format("%02d:%02d", mins, secs)
+        }
+    }
+
+    when (currentState) {
+        NowBarState.MINIMIZED -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+            ) {
+                BlinkingMicIcon(isRecording = state.isRecording, color = color, size = 14.dp)
+                Text(
+                    text = formatVoiceRecorderDuration(state.durationMs),
+                    color = color,
+                    fontSize = (11f + sizeOffset).sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        NowBarState.COMPACT -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BlinkingMicIcon(isRecording = state.isRecording, color = color, size = 16.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = state.appName.ifEmpty { "Voice Recorder" },
+                        color = color,
+                        fontSize = (12f + sizeOffset).sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (state.isRecording) "Recording" else "Paused",
+                        color = color.copy(alpha = 0.8f),
+                        fontSize = (11f + sizeOffset).sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                if (isDashboardCard) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Discard / Stop button
+                        MiniCircleButton(
+                            iconRes = NovaIcons.Delete,
+                            onClick = {
+                                onInteraction()
+                                com.novabar.app.services.NovaNotificationListener.stopVoiceRecorder()
+                            },
+                            color = color,
+                            enabled = state.hasStop
+                        )
+                        
+                        // Pause / Resume button
+                        val canPauseOrResume = if (state.isRecording) state.hasPause else state.hasResume
+                        MiniCircleButton(
+                            iconRes = if (state.isRecording) NovaIcons.Pause else NovaIcons.Play,
+                            onClick = {
+                                onInteraction()
+                                if (state.isRecording) {
+                                    com.novabar.app.services.NovaNotificationListener.pauseVoiceRecorder()
+                                } else {
+                                    com.novabar.app.services.NovaNotificationListener.resumeVoiceRecorder()
+                                }
+                            },
+                            color = color,
+                            enabled = canPauseOrResume,
+                            isPrimary = true
+                        )
+                    }
+                } else {
+                    // Show compact duration in the pill when not in dashboard card
+                    Text(
+                        text = formatVoiceRecorderDuration(state.durationMs),
+                        color = color,
+                        fontSize = (14f + sizeOffset).sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+        NowBarState.EXPANDED -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Header (AppName + Recording State)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = contentAlpha },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (state.appIcon != null) {
+                        DrawableImage(
+                            drawable = state.appIcon,
+                            tintColor = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = NovaIcons.VoiceRecorder),
+                            contentDescription = "Voice Recorder",
+                            tint = color,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = state.appName.ifEmpty { "Voice Recorder" },
+                            color = color,
+                            fontSize = (15f + sizeOffset).sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (state.isRecording) "Recording" else "Paused",
+                            color = color.copy(alpha = 0.6f),
+                            fontSize = (11f + sizeOffset).sp
+                        )
+                    }
+                }
+
+                // Middle: Visualizer + Large Duration
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .graphicsLayer { alpha = contentAlpha },
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = formatVoiceRecorderDuration(state.durationMs),
+                        color = color,
+                        fontSize = (36f + sizeOffset).sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    AudioVisualizer(
+                        isAnimating = state.isRecording,
+                        barCount = 18,
+                        barColor = color,
+                        maxBarHeight = 40.dp,
+                        barWidth = 2.5.dp,
+                        barSpacing = 3.dp,
+                        amplitudes = state.amplitudes
+                    )
+                }
+
+                // Bottom: Action Buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = controlsAlpha
+                            translationY = controlsOffsetY.value
+                        },
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Discard / Stop Button (Trash Icon)
+                    CircleButton(
+                        iconRes = NovaIcons.Delete,
+                        onClick = {
+                            onInteraction()
+                            com.novabar.app.services.NovaNotificationListener.stopVoiceRecorder()
+                        },
+                        color = color,
+                        enabled = state.hasStop,
+                        size = 46.dp,
+                        iconSize = 20.dp
+                    )
+
+                    // Play/Pause Button (Primary Action)
+                    val canPauseOrResume = if (state.isRecording) state.hasPause else state.hasResume
+                    CircleButton(
+                        iconRes = if (state.isRecording) NovaIcons.Pause else NovaIcons.Play,
+                        onClick = {
+                            onInteraction()
+                            if (state.isRecording) {
+                                com.novabar.app.services.NovaNotificationListener.pauseVoiceRecorder()
+                            } else {
+                                com.novabar.app.services.NovaNotificationListener.resumeVoiceRecorder()
+                            }
+                        },
+                        color = color,
+                        enabled = canPauseOrResume,
+                        isPrimary = true,
+                        size = 56.dp,
+                        iconSize = 24.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
 // --- STOPWATCH VIEW ---
 @Composable
 fun StopwatchView(
@@ -2485,6 +3293,53 @@ private fun cleanDistanceText(input: String): String {
         return clean
     }
     return ""
+}
+
+@Composable
+fun CircleButton(
+    iconRes: Int,
+    onClick: () -> Unit,
+    color: Color,
+    enabled: Boolean = true,
+    isPrimary: Boolean = false,
+    size: androidx.compose.ui.unit.Dp = 50.dp,
+    iconSize: androidx.compose.ui.unit.Dp = 22.dp
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.9f else 1f, label = "CircleButtonScale")
+    
+    Box(
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(
+                if (isPrimary) {
+                    if (enabled) color else color.copy(alpha = 0.3f)
+                } else {
+                    if (enabled) color.copy(alpha = 0.1f) else color.copy(alpha = 0.03f)
+                }
+            )
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = null) {
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(id = iconRes),
+            contentDescription = null,
+            tint = if (isPrimary) {
+                if (color == Color.White) Color.Black else Color.White
+            } else {
+                if (enabled) color else color.copy(alpha = 0.3f)
+            },
+            modifier = Modifier.size(iconSize)
+        )
+    }
 }
 
 @Composable
@@ -2988,7 +3843,7 @@ fun AudioVisualizer(
                 for (i in 0 until barCount) {
                     val phaseOffset = i * 0.6f
                     val amplitude = 0.2f + 0.8f * Math.abs(Math.sin((animationPhase + phaseOffset).toDouble())).toFloat()
-                    val barHeight = (height * amplitude).coerceIn(4.dp.toPx(), height)
+                    val barHeight = (height * amplitude).coerceIn(minOf(4.dp.toPx(), height), height)
                     
                     val x = i * (barWidth + spacing)
                     val y = (height - barHeight) / 2f
@@ -3009,7 +3864,7 @@ fun AudioVisualizer(
                 for (i in 0 until barCount) {
                     val phaseOffset = i * 1.0f
                     val amplitude = 0.15f + 0.85f * Math.abs(Math.sin((animationPhase * 1.3f + phaseOffset).toDouble())).toFloat()
-                    val barHeight = (height * amplitude).coerceIn(3.dp.toPx(), height)
+                    val barHeight = (height * amplitude).coerceIn(minOf(3.dp.toPx(), height), height)
                     
                     val x = i * (barWidth + spacing)
                     val y = (height - barHeight) / 2f
@@ -4718,5 +5573,306 @@ fun ManeuverIcon(type: com.novabar.app.domain.ManeuverType, color: Color, modifi
         }
     }
 }
+
+// --- NOVAGUY VIEWS ---
+
+@Composable
+fun NovaGuyCompactView(color: Color, pillWidth: androidx.compose.ui.unit.Dp = 185.dp) {
+    val eyeOffset by OverlayStateManager.novaGuyEyeOffset.collectAsState()
+    var isBlinking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay((2500..6000).random().toLong())
+            isBlinking = true
+            delay(100L)
+            isBlinking = false
+        }
+    }
+
+    val scaleFactor = (pillWidth.value / 185f).coerceIn(0.5f, 2.0f)
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(width = 44.dp * scaleFactor, height = 20.dp)) {
+            val density = this.density
+            val offsetPx = eyeOffset * density * scaleFactor * 2.2f
+            
+            val centerY = size.height / 2f
+            val centerX = size.width / 2f
+            
+            val eyeSpacingPx = 14.dp.toPx()
+            val eyeWidthPx = 4.dp.toPx()
+            val eyeHeightPx = 7.dp.toPx()
+            val eyeCornerRadiusPx = 2.dp.toPx()
+            
+            val leftEyeX = centerX - eyeSpacingPx / 2f + offsetPx
+            val rightEyeX = centerX + eyeSpacingPx / 2f + offsetPx
+            
+            val gapPx = 2.dp.toPx()
+            val connectorThicknessPx = 2.dp.toPx()
+            
+            val leftInnerEdgeX = leftEyeX + (eyeWidthPx / 2f)
+            val rightInnerEdgeX = rightEyeX - (eyeWidthPx / 2f)
+            
+            val connectorStartX = leftInnerEdgeX + gapPx + (connectorThicknessPx / 2f)
+            val connectorEndX = rightInnerEdgeX - gapPx - (connectorThicknessPx / 2f)
+            
+            // Draw floating connecting line with rounded ends and small symmetrical gaps
+            drawLine(
+                color = color.copy(alpha = 0.5f),
+                start = Offset(connectorStartX, centerY),
+                end = Offset(connectorEndX, centerY),
+                strokeWidth = connectorThicknessPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            
+            if (isBlinking) {
+                val strokeW = 2.dp.toPx()
+                drawLine(
+                    color = color,
+                    start = Offset(leftEyeX - eyeWidthPx / 2f, centerY),
+                    end = Offset(leftEyeX + eyeWidthPx / 2f, centerY),
+                    strokeWidth = strokeW,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(rightEyeX - eyeWidthPx / 2f, centerY),
+                    end = Offset(rightEyeX + eyeWidthPx / 2f, centerY),
+                    strokeWidth = strokeW,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+            } else {
+                // Draw left capsule eye
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(leftEyeX - eyeWidthPx / 2f, centerY - eyeHeightPx / 2f),
+                    size = androidx.compose.ui.geometry.Size(eyeWidthPx, eyeHeightPx),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(eyeCornerRadiusPx, eyeCornerRadiusPx)
+                )
+                
+                // Draw right capsule eye
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(rightEyeX - eyeWidthPx / 2f, centerY - eyeHeightPx / 2f),
+                    size = androidx.compose.ui.geometry.Size(eyeWidthPx, eyeHeightPx),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(eyeCornerRadiusPx, eyeCornerRadiusPx)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun NovaGuyExpandedView(color: Color) {
+    val selectedMessage by OverlayStateManager.selectedNovaGuyMessage.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val messageText = selectedMessage?.let { context.getString(it.textResId) } ?: "Hey! 👋"
+    var isBlinking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay((2500..6000).random().toLong())
+            isBlinking = true
+            delay(100L)
+            isBlinking = false
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Centered large NovaGuy face
+        Canvas(modifier = Modifier.size(width = 80.dp, height = 40.dp)) {
+            val centerY = size.height / 2f
+            val centerX = size.width / 2f
+            
+            val eyeSpacingPx = 28.dp.toPx()
+            val eyeWidthPx = 8.dp.toPx()
+            val eyeHeightPx = 14.dp.toPx()
+            val eyeCornerRadiusPx = 4.dp.toPx()
+            
+            val leftEyeX = centerX - eyeSpacingPx / 2f
+            val rightEyeX = centerX + eyeSpacingPx / 2f
+            
+            val gapPx = 4.dp.toPx()
+            val connectorThicknessPx = 4.dp.toPx()
+            
+            val leftInnerEdgeX = leftEyeX + (eyeWidthPx / 2f)
+            val rightInnerEdgeX = rightEyeX - (eyeWidthPx / 2f)
+            
+            val connectorStartX = leftInnerEdgeX + gapPx + (connectorThicknessPx / 2f)
+            val connectorEndX = rightInnerEdgeX - gapPx - (connectorThicknessPx / 2f)
+            
+            // Draw floating connecting line with rounded ends and small symmetrical gaps
+            drawLine(
+                color = color.copy(alpha = 0.5f),
+                start = Offset(connectorStartX, centerY),
+                end = Offset(connectorEndX, centerY),
+                strokeWidth = connectorThicknessPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            
+            if (isBlinking) {
+                val strokeW = 4.dp.toPx()
+                drawLine(
+                    color = color,
+                    start = Offset(leftEyeX - eyeWidthPx / 2f, centerY),
+                    end = Offset(leftEyeX + eyeWidthPx / 2f, centerY),
+                    strokeWidth = strokeW,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(rightEyeX - eyeWidthPx / 2f, centerY),
+                    end = Offset(rightEyeX + eyeWidthPx / 2f, centerY),
+                    strokeWidth = strokeW,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+            } else {
+                // Draw left capsule eye
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(leftEyeX - eyeWidthPx / 2f, centerY - eyeHeightPx / 2f),
+                    size = androidx.compose.ui.geometry.Size(eyeWidthPx, eyeHeightPx),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(eyeCornerRadiusPx, eyeCornerRadiusPx)
+                )
+                
+                // Draw right capsule eye
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(rightEyeX - eyeWidthPx / 2f, centerY - eyeHeightPx / 2f),
+                    size = androidx.compose.ui.geometry.Size(eyeWidthPx, eyeHeightPx),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(eyeCornerRadiusPx, eyeCornerRadiusPx)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Greeting text
+        Text(
+            text = messageText,
+            color = color,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Optional small subtitle (future use)
+        Text(
+            text = "",
+            color = color.copy(alpha = 0.6f),
+            fontSize = 12.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun LockIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val centerX = center.x
+        val centerY = center.y
+        
+        // Base: rounded rectangle at the bottom half
+        val baseWidth = w * 0.7f
+        val baseHeight = h * 0.45f
+        val baseLeft = (w - baseWidth) / 2f
+        val baseTop = h * 0.48f
+        val baseCorner = 2.dp.toPx()
+        
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(baseLeft, baseTop),
+            size = androidx.compose.ui.geometry.Size(baseWidth, baseHeight),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(baseCorner, baseCorner)
+        )
+        
+        // Shackle: arched line at the top half
+        val shackleRadius = w * 0.22f
+        val shackleStroke = 1.8f.dp.toPx()
+        val path = Path().apply {
+            moveTo(centerX - shackleRadius, baseTop)
+            lineTo(centerX - shackleRadius, centerY - h * 0.12f)
+            arcTo(
+                rect = androidx.compose.ui.geometry.Rect(
+                    left = centerX - shackleRadius,
+                    top = centerY - h * 0.12f - shackleRadius,
+                    right = centerX + shackleRadius,
+                    bottom = centerY - h * 0.12f + shackleRadius
+                ),
+                startAngleDegrees = 180f,
+                sweepAngleDegrees = 180f,
+                forceMoveTo = false
+            )
+            lineTo(centerX + shackleRadius, baseTop)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = shackleStroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+    }
+}
+
+@Composable
+fun RightSegmentContextView(
+    isLocked: Boolean,
+    timeFormat: String,
+    showSeconds: Boolean,
+    color: Color,
+    textSizeOffset: Float
+) {
+    var timeText by remember { mutableStateOf("") }
+    
+    LaunchedEffect(timeFormat, showSeconds) {
+        while (true) {
+            timeText = formatSystemTime(timeFormat, showSeconds)
+            delay(if (showSeconds) 500L else 5000L)
+        }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.animation.Crossfade(
+            targetState = isLocked,
+            label = "LockTimeTransition"
+        ) { locked ->
+            if (locked) {
+                LockIcon(
+                    color = color,
+                    modifier = Modifier.size(16.dp)
+                )
+            } else {
+                Text(
+                    text = timeText,
+                    color = color,
+                    fontSize = (13f + textSizeOffset).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
 
 
