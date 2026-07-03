@@ -202,7 +202,7 @@ Compatibility may vary depending on manufacturer restrictions and battery optimi
 
 * Timer synchronization may occasionally differ from the source timer by a fraction of a second depending on notification update timing.
 * Some manufacturers may aggressively restrict background services.
-* Voice recorder activity controls re not working on samsung devices because samsung uses it's proprietary RemoteViews that are not exposed through public Android APIs.
+* Voice recorder activity controls are not working on samsung devices because samsung uses it's proprietary RemoteViews that are not exposed through public Android APIs.
 
 ---
 
