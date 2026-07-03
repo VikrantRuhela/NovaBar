@@ -230,7 +230,7 @@ Nova Bar was inspired by modern live activity systems and Samsung's Now Bar expe
 ![media__1782139966952.jpg](assets/media__1782139966952.jpg)
 
 ### App UI
-![media__1782140566611.jpg](assets/NovaBar-UI.png)
+![NovaBar-UI,png](assets/NovaBar-UI.png)
 
 ---
 ## License
