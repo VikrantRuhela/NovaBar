@@ -12,52 +12,36 @@ Designed for older Android versions that never received native live activities, 
 
 ## Features
 
-### 🎵 Media Playback
+### Media Playback
 
-* Real-time media session detection
-* Album artwork support
-* Play / Pause controls
-* Previous / Next controls
-* Playback progress support
-* Minimized and Compact media views
-* Automatic app detection
+### Timers & Stopwatch
 
-### ⏱ Timers & Stopwatch
+### Navigation
 
-* Active timer detection
-* Active stopwatch detection
-* Live countdown updates
-* Clean HH:MM:SS formatting
-* Minimized and Compact views
+### Notifications
 
-### 🧭 Navigation
+### Calls
 
-* Active navigation session detection
-* Route information support
-* Compact navigation activity display
+### Charging Activity
 
-### 🔔 Notifications
+### Hotspot
 
-* Displays app names instead of package names
-* Clean notification presentation
-* Compact activity display
-* Quick glance information
+### Voice Recorder
 
-### 📞 Calls
-
-* Active call detection
-* Compact call activity
-* End call support
-* Real-time call state updates
-
-### ⚡ Charging Activity
-
-* Live battery percentage display
-* Dynamic charging activity
-* Battery reservoir animation
-* Charging status updates
+### NovaGuy
 
 ---
+
+## NovaGuy
+
+### Your own companion
+
+* Appears throughout the day.
+* Greets you with contextual messages.
+* Reacts to your music.
+* Warns you when your battery is low.
+* Silently watches over your lock screen
+
 
 ## Activity System
 
@@ -72,6 +56,8 @@ Supported activities include:
 * Notifications
 * Charging
 * Calls
+* Hotspot
+* Voice Recorder
 
 Every activity includes:
 
@@ -79,27 +65,9 @@ Every activity includes:
 
 Shows only the most important information.
 
-Examples:
-
-* Album artwork + visualizer
-* Timer icon + remaining time
-* Navigation indicator
-* Battery percentage
-* Notification icon
-
 ### Compact View
 
 Displays additional information and controls while maintaining a lightweight footprint.
-
-Examples:
-
-* Media controls
-* Timer information
-* Navigation details
-* Notification details
-* Call controls
-
----
 
 ## Overlay Engine
 
@@ -120,7 +88,7 @@ Benefits:
 * Improved immersion
 * More native appearance
 
----
+
 
 ## Customization
 
@@ -129,26 +97,6 @@ Benefits:
 * Left Alignment
 * Center Alignment
 * Right Alignment
-
-### Alignment-Aware Expansion
-
-Nova Bar intelligently expands according to its position.
-
-#### Left Alignment
-
-* Left edge remains fixed
-* Expands toward the right
-
-#### Center Alignment
-
-* Expands symmetrically
-
-#### Right Alignment
-
-* Right edge remains fixed
-* Expands toward the left
-
-This ensures the activity panel remains visible and avoids rendering outside the screen boundaries.
 
 ### Appearance
 
@@ -169,22 +117,8 @@ Nova Bar requires the following permissions:
 
 ### Accessibility Service
 
-Required for:
-
-* Accessibility Overlay engine
-* Enhanced system integration
-* Activity detection
-* Overlay rendering
 
 ### Notification Access
-
-Required for:
-
-* Media playback detection
-* Notifications
-* Timers
-* Stopwatch activities
-* Navigation activity detection
 
 ### Display Over Other Apps
 
@@ -192,11 +126,6 @@ Required when using the Application Overlay engine.
 
 ### Phone / Call Control Permission
 
-Required for:
-
-* Call activity detection
-* Call state monitoring
-* End call functionality
 
 Nova Bar only uses call-related permissions to provide call activities and call controls inside the bar.
 
@@ -273,18 +202,7 @@ Compatibility may vary depending on manufacturer restrictions and battery optimi
 
 * Timer synchronization may occasionally differ from the source timer by a fraction of a second depending on notification update timing.
 * Some manufacturers may aggressively restrict background services.
-
----
-
-## Roadmap
-
-### v1.1
-
-* Additional activity integrations
-* UI refinements
-* Animation improvements
-* Performance optimizations
-* Synchronization improvements
+* Voice recorder activity controls are not working on samsung devices because samsung uses it's proprietary RemoteViews that are not exposed through public Android APIs.
 
 ---
 
@@ -312,7 +230,7 @@ Nova Bar was inspired by modern live activity systems and Samsung's Now Bar expe
 ![media__1782139966952.jpg](assets/media__1782139966952.jpg)
 
 ### App UI
-![media__1782140566611.jpg](assets/media__1782140566611.jpg)
+![NovaBar-UI,png](assets/NovaBar-UI.png)
 
 ---
 ## License

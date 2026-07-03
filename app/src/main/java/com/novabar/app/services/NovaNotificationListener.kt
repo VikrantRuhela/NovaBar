@@ -29,10 +29,12 @@ class NovaNotificationListener : NotificationListenerService() {
         private var activeController: MediaController? = null
         private var activeTimerSbn: StatusBarNotification? = null
         private var activeStopwatchSbn: StatusBarNotification? = null
+        private var activeVoiceRecorderSbn: StatusBarNotification? = null
 
         fun getActiveMediaController(): MediaController? = activeController
         fun getActiveTimerSbn(): StatusBarNotification? = activeTimerSbn
         fun getActiveStopwatchSbn(): StatusBarNotification? = activeStopwatchSbn
+        fun getActiveVoiceRecorderSbn(): StatusBarNotification? = activeVoiceRecorderSbn
 
         fun play() {
             Log.d("NovaBar", "BUTTON_CLICKED: button=MEDIA_PLAY")
@@ -184,6 +186,86 @@ class NovaNotificationListener : NotificationListenerService() {
 
         fun lapStopwatch() {
             triggerNotificationAction(activeStopwatchSbn, listOf("lap", "split"), "STOPWATCH_LAP")
+        }
+
+        fun resetStopwatch() {
+            val success = triggerNotificationAction(activeStopwatchSbn, listOf("reset", "restart", "delete", "clear"), "STOPWATCH_RESET")
+            if (success) {
+                activeStopwatchSbn = null
+                OverlayStateManager.setStopwatchState(null)
+            }
+        }
+
+        fun pauseVoiceRecorder() {
+            val current = OverlayStateManager.voiceRecorderState.value
+            if (current?.pauseIntent != null) {
+                try {
+                    current.pauseIntent.send()
+                    Log.d("NovaBar", "VOICE_RECORDER_PAUSE: Sent matched PendingIntent successfully")
+                    OverlayStateManager.setVoiceRecorderState(current.copy(
+                        isRecording = false,
+                        isPaused = true
+                    ))
+                } catch (e: Exception) {
+                    Log.e("NovaBar", "VOICE_RECORDER_PAUSE: Failed to send PendingIntent", e)
+                }
+            } else {
+                val success = triggerNotificationAction(activeVoiceRecorderSbn, listOf("pause", "stop", "hold"), "VOICE_RECORDER_PAUSE")
+                if (success) {
+                    if (current != null) {
+                        OverlayStateManager.setVoiceRecorderState(current.copy(
+                            isRecording = false,
+                            isPaused = true
+                        ))
+                    }
+                }
+            }
+        }
+
+        fun resumeVoiceRecorder() {
+            val current = OverlayStateManager.voiceRecorderState.value
+            if (current?.resumeIntent != null) {
+                try {
+                    current.resumeIntent.send()
+                    Log.d("NovaBar", "VOICE_RECORDER_RESUME: Sent matched PendingIntent successfully")
+                    OverlayStateManager.setVoiceRecorderState(current.copy(
+                        isRecording = true,
+                        isPaused = false
+                    ))
+                } catch (e: Exception) {
+                    Log.e("NovaBar", "VOICE_RECORDER_RESUME: Failed to send PendingIntent", e)
+                }
+            } else {
+                val success = triggerNotificationAction(activeVoiceRecorderSbn, listOf("resume", "continue", "start", "record", "play"), "VOICE_RECORDER_RESUME")
+                if (success) {
+                    if (current != null) {
+                        OverlayStateManager.setVoiceRecorderState(current.copy(
+                            isRecording = true,
+                            isPaused = false
+                        ))
+                    }
+                }
+            }
+        }
+
+        fun stopVoiceRecorder() {
+            val current = OverlayStateManager.voiceRecorderState.value
+            if (current?.stopIntent != null) {
+                try {
+                    current.stopIntent.send()
+                    Log.d("NovaBar", "VOICE_RECORDER_STOP: Sent matched PendingIntent successfully")
+                    activeVoiceRecorderSbn = null
+                    OverlayStateManager.setVoiceRecorderState(null)
+                } catch (e: Exception) {
+                    Log.e("NovaBar", "VOICE_RECORDER_STOP: Failed to send PendingIntent", e)
+                }
+            } else {
+                val success = triggerNotificationAction(activeVoiceRecorderSbn, listOf("stop", "done", "save", "discard", "delete", "finish"), "VOICE_RECORDER_STOP")
+                if (success) {
+                    activeVoiceRecorderSbn = null
+                    OverlayStateManager.setVoiceRecorderState(null)
+                }
+            }
         }
 
         private fun triggerNotificationAction(sbn: StatusBarNotification?, keywords: List<String>, buttonName: String): Boolean {
@@ -649,13 +731,46 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
-                if (sbn.packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
-                    Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_IGNORED: package=${sbn.packageName}")
-                    return@launch
-                }
                 val packageName = sbn.packageName
                 val notification = sbn.notification
-                val extras = notification.extras
+                val extras = notification.extras ?: android.os.Bundle()
+
+                val isVoiceRecorderPkg = packageName.contains("recorder") || 
+                        packageName.contains("voicenote") || 
+                        packageName.contains("soundrec") || 
+                        packageName.contains("audiorec") || 
+                        packageName.contains("dictaphone") ||
+                        packageName == "com.sec.android.app.voicenote" ||
+                        packageName == "com.google.android.apps.recorder"
+
+                if (isVoiceRecorderPkg) {
+                    val ongoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+                    val layoutId = notification.contentView?.layoutId ?: 0
+                    val layoutName = try {
+                        val packageContext = createPackageContext(packageName, 0)
+                        packageContext.resources.getResourceEntryName(layoutId)
+                    } catch (e: Exception) {
+                        "unknown"
+                    }
+                    val actionsList = notification.actions ?: emptyArray()
+                    val actionsStr = actionsList.mapIndexed { idx, act -> 
+                        "Action #$idx: title='${act.title}', hasIntent=${act.actionIntent != null}"
+                    }.joinToString(", ")
+                    val extrasStr = try {
+                        extras.keySet().map { "$it=${extras.get(it)}" }.joinToString(", ")
+                    } catch (e: Exception) {
+                        "error_reading_extras"
+                    }
+                    val chronometerInfo = "showChronometer=${extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER)}, base=${notification.`when`}"
+                    
+                    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 1: onNotificationPosted() | package=$packageName | key=${sbn.key} | id=${sbn.id} | flags=${notification.flags} | category=${notification.category} | isOngoing=$ongoing")
+                    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 2: Parsing | title='${extras.getCharSequence(android.app.Notification.EXTRA_TITLE)}' | text='${extras.getCharSequence(android.app.Notification.EXTRA_TEXT)}' | extras={$extrasStr} | chronometer={$chronometerInfo} | actionCount=${actionsList.size} | actions=[$actionsStr] | layoutId=$layoutId | layoutPkg=${notification.contentView?.getPackage()} | layoutName=$layoutName")
+                }
+
+                if (packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
+                    android.util.Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_IGNORED: package=${sbn.packageName}")
+                    return@launch
+                }
 
                 // Check if it is a media notification, and if so, update active sessions immediately as a backup
                 val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
@@ -807,13 +922,60 @@ class NovaNotificationListener : NotificationListenerService() {
                     Log.i("NovaBar-Navigation", logMsg)
                     com.novabar.app.utils.DeveloperLogger.log(this@NovaNotificationListener, "NavigationCompat", logMsg)
 
+                    // Resolve true instruction and trip info texts
+                    val isTitleTrip = isTripInfoString(title)
+                    val isTitleDist = isManeuverDistanceString(title)
+                    val isTextTrip = isTripInfoString(text)
+                    val isTextDist = isManeuverDistanceString(text)
+
+                    var instructionText = ""
+                    var tripInfoText = ""
+                    var parsedDistanceRemaining = ""
+
+                    if (isTitleTrip) {
+                        tripInfoText = title
+                        instructionText = if (!isTextTrip && !isTextDist) text else ""
+                    } else if (isTitleDist) {
+                        parsedDistanceRemaining = title
+                        instructionText = if (!isTextTrip && !isTextDist) text else ""
+                        tripInfoText = if (isTextTrip) text else ""
+                    } else if (isTextTrip) {
+                        tripInfoText = text
+                        instructionText = if (!isTitleTrip && !isTitleDist) title else ""
+                    } else if (isTextDist) {
+                        parsedDistanceRemaining = text
+                        instructionText = if (!isTitleTrip && !isTitleDist) title else ""
+                        tripInfoText = if (isTitleTrip) title else ""
+                    } else {
+                        // Neither title nor text is trip info or simple distance.
+                        instructionText = title
+                    }
+
                     // 1. Gather all candidate text sources (subtext first, then RemoteViews)
                     val remoteViewsTexts = extractRemoteViewsTexts(notification)
                     val allCandidateTexts = mutableListOf<String>()
                     if (subtext.isNotEmpty()) {
                         allCandidateTexts.add(subtext)
                     }
+                    if (tripInfoText.isNotEmpty()) {
+                        allCandidateTexts.add(tripInfoText)
+                    }
+                    if (title.isNotEmpty()) {
+                        allCandidateTexts.add(title)
+                    }
+                    if (text.isNotEmpty()) {
+                        allCandidateTexts.add(text)
+                    }
                     allCandidateTexts.addAll(remoteViewsTexts)
+
+                    if (instructionText.isEmpty()) {
+                        for (rvText in remoteViewsTexts) {
+                            if (rvText.isNotEmpty() && !isTripInfoString(rvText) && !isManeuverDistanceString(rvText) && rvText != appLabel) {
+                                instructionText = rvText
+                                break
+                            }
+                        }
+                    }
 
                     // 2. Parse ETA, Remaining Trip Distance, and Travel Duration (Trip Metadata)
                     var parsedEta = ""
@@ -848,26 +1010,30 @@ class NovaNotificationListener : NotificationListenerService() {
                         parsedEta = eta
                     }
 
-                    // 3. Distance to next maneuver (RemoteViews / text first)
-                    var parsedDistanceRemaining = ""
-                    val distanceRegex = Regex("""(?i)^\s*(?:In\s+)?\d+(?:\.\d+)?\s*(?:ft|mi|m|km|feet|miles|meters|yd|yds|yard|yards|feet)\s*$""")
-                    if (text.trim().matches(distanceRegex)) {
-                        parsedDistanceRemaining = text.trim()
-                    } else {
-                        // Scan remote views text
-                        for (candidate in remoteViewsTexts) {
-                            val clean = candidate.trim()
-                            if (clean.matches(distanceRegex)) {
-                                parsedDistanceRemaining = clean
-                                break
+                    // 3. Distance to next maneuver (LiveBridge regex implementation, filtering out trip info)
+                    val liveBridgeDistancePattern = Regex("""(?i)(?<!\d)\d{1,4}(?:[\s.,]\d{1,2})?\s*(?:км|km|м|m|mi|ft|миль|фут|公里|公尺|米|yards|yd|yds|feet)\b""")
+                    
+                    if (parsedDistanceRemaining.isEmpty()) {
+                        // Combine non-trip-info candidates to search for next maneuver distance
+                        val combinedText = buildString {
+                            if (subtext.isNotEmpty() && !isTripInfoString(subtext)) {
+                                append(subtext).append(" ")
+                            }
+                            if (instructionText.isNotEmpty() && !isTripInfoString(instructionText)) {
+                                append(instructionText).append(" ")
+                            }
+                            for (rvText in remoteViewsTexts) {
+                                if (rvText.isNotEmpty() && !isTripInfoString(rvText)) {
+                                    append(rvText).append(" ")
+                                }
                             }
                         }
-                    }
-                    if (parsedDistanceRemaining.isEmpty()) {
-                        // Fallback if none matched but title/text is short
-                        val cleanText = text.trim()
-                        if (cleanText.length <= 10 && cleanText.any { it.isDigit() }) {
-                            parsedDistanceRemaining = cleanText
+                        
+                        val distanceMatch = liveBridgeDistancePattern.find(combinedText)
+                        if (distanceMatch != null) {
+                            parsedDistanceRemaining = distanceMatch.value
+                                .replace(Regex("\\s+"), " ")
+                                .trim()
                         }
                     }
 
@@ -896,24 +1062,60 @@ class NovaNotificationListener : NotificationListenerService() {
                         } catch (_: Exception) {}
                     }
 
-                    // 5. Road name parsing (using existing keyword logic)
+                    // 5. Road name parsing
                     var parsedRoadName = ""
-                    val lowerTitle = title.lowercase()
-                    if (lowerTitle.contains("onto ")) {
-                        val index = lowerTitle.indexOf("onto ") + 5
-                        parsedRoadName = title.substring(index).trim()
-                    } else if (lowerTitle.contains("on ")) {
-                        val index = lowerTitle.indexOf("on ") + 3
-                        parsedRoadName = title.substring(index).trim()
-                    } else if (lowerTitle.contains("toward ")) {
-                        val index = lowerTitle.indexOf("toward ") + 7
-                        parsedRoadName = title.substring(index).trim()
-                    } else {
-                        parsedRoadName = title
+                    val roadCandidate = if (text != instructionText && !isTripInfoString(text) && !isManeuverDistanceString(text)) text else ""
+                    
+                    fun extractRoadName(input: String): String {
+                        val lower = input.lowercase().trim()
+                        return when {
+                            lower.startsWith("continue on ") -> input.trim()
+                            lower.startsWith("stay on ") -> input.trim()
+                            lower.startsWith("keep on ") -> input.trim()
+                            lower.startsWith("towards ") -> input.trim()
+                            lower.startsWith("toward ") -> input.trim()
+                            lower.contains("onto ") -> input.substring(lower.indexOf("onto ") + 5).trim()
+                            lower.contains("on ") -> input.substring(lower.indexOf("on ") + 3).trim()
+                            lower.contains("toward ") -> input.substring(lower.indexOf("toward ") + 7).trim()
+                            lower.contains("towards ") -> input.substring(lower.indexOf("towards ") + 8).trim()
+                            else -> ""
+                        }
+                    }
+                    
+                    if (roadCandidate.isNotEmpty()) {
+                        val cleaned = cleanRoadName(roadCandidate)
+                        val extracted = extractRoadName(cleaned)
+                        val candidateRoad = extracted.ifEmpty { cleaned }
+                        if (!containsTripOrDistance(candidateRoad)) {
+                            parsedRoadName = candidateRoad
+                        }
+                    }
+                    
+                    if (parsedRoadName.isEmpty() && instructionText.isNotEmpty()) {
+                        val cleaned = cleanRoadName(instructionText)
+                        val extracted = extractRoadName(cleaned)
+                        val candidateRoad = extracted.ifEmpty { 
+                            if (!containsTripOrDistance(cleaned)) cleaned else "" 
+                        }
+                        if (candidateRoad.isNotEmpty() && !containsTripOrDistance(candidateRoad)) {
+                            parsedRoadName = candidateRoad
+                        }
                     }
 
+                    // Check that the parsed road name is not the destination
+                    val destClean = parsedDestination.lowercase().trim()
+                    val roadClean = parsedRoadName.lowercase().trim()
+                    if (destClean.isNotEmpty() && (roadClean == destClean || roadClean == "to $destClean" || roadClean == "towards $destClean")) {
+                        parsedRoadName = ""
+                    }
+                    
+                    if (containsTripOrDistance(parsedRoadName)) {
+                        parsedRoadName = ""
+                    }
+
+
                     OverlayStateManager.navigationState.value = NavigationState(
-                        maneuverInstruction = title,
+                        maneuverInstruction = instructionText,
                         distanceRemaining = parsedDistanceRemaining,
                         eta = parsedEta,
                         remainingDistance = parsedRemainingDistance,
@@ -928,6 +1130,22 @@ class NovaNotificationListener : NotificationListenerService() {
                 } else if (isNav || isMapsPkg) {
                     val reason = if (!settings.navigationEnabled) "Navigation disabled in settings" else "Not classified as navigation category/package"
                     Log.i("NovaBar-Navigation", "Classification REJECTED: $reason")
+                }
+
+                // 1.5. Check if Voice Recorder Notification
+                val isActiveVoiceRecorder = (activeVoiceRecorderSbn?.packageName == sbn.packageName)
+                when (val parsedState = com.novabar.app.utils.VoiceRecorderCompatibilityLayer.parse(sbn, settings, this@NovaNotificationListener, isActiveVoiceRecorder)) {
+                    is com.novabar.app.utils.ParsedVoiceRecorderState.Active -> {
+                        activeVoiceRecorderSbn = sbn
+                        OverlayStateManager.setVoiceRecorderState(parsedState.state)
+                        return@launch
+                    }
+                    else -> {
+                        if (isActiveVoiceRecorder) {
+                            activeVoiceRecorderSbn = null
+                            OverlayStateManager.setVoiceRecorderState(null)
+                        }
+                    }
                 }
 
                 // 2. Check if Clock app (Timer or Stopwatch)
@@ -1063,11 +1281,24 @@ class NovaNotificationListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         scope.launch(Dispatchers.IO) {
             try {
-                if (sbn.packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
-                    Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_REMOVED_IGNORED: package=${sbn.packageName}")
+                val packageName = sbn.packageName
+                val isVoiceRecorderPkg = packageName.contains("recorder") || 
+                        packageName.contains("voicenote") || 
+                        packageName.contains("soundrec") || 
+                        packageName.contains("audiorec") || 
+                        packageName.contains("dictaphone") ||
+                        packageName == "com.sec.android.app.voicenote" ||
+                        packageName == "com.google.android.apps.recorder"
+
+                if (isVoiceRecorderPkg) {
+                    val ongoing = (sbn.notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+                    android.util.Log.d("VoiceRecorder", "[VoiceRecorder] Stage 1: onNotificationRemoved() | package=$packageName | key=${sbn.key} | id=${sbn.id} | flags=${sbn.notification.flags} | category=${sbn.notification.category} | isOngoing=$ongoing")
+                }
+
+                if (packageName != "com.google.android.apps.maps" && isScreenRecordingNotification(sbn)) {
+                    android.util.Log.d("NovaBar", "SCREEN_RECORDING_NOTIFICATION_REMOVED_IGNORED: package=${sbn.packageName}")
                     return@launch
                 }
-                val packageName = sbn.packageName
                 val currentNotification = OverlayStateManager.activeState.value
                 
                 // Clear call state if incall notification is removed
@@ -1100,6 +1331,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     Log.i("NovaBar-Stopwatch", "Activity removal: removing active stopwatch state because notification was removed.")
                     activeStopwatchSbn = null
                     OverlayStateManager.setStopwatchState(null)
+                }
+                if (activeVoiceRecorderSbn?.key == sbn.key) {
+                    Log.i("NovaBar-VoiceRecorder", "Activity removal: removing active voice recorder state because notification was removed.")
+                    activeVoiceRecorderSbn = null
+                    OverlayStateManager.setVoiceRecorderState(null)
                 }
                 val activeNotifs = try { activeNotifications } catch (ex: Exception) { null }
                 DiagnosticsManager.notificationCount.value = activeNotifs?.size ?: 0
@@ -1221,4 +1457,106 @@ class NovaNotificationListener : NotificationListenerService() {
         }
         return null
     }
+
+    private fun isTripInfoString(str: String): Boolean {
+        val clean = str.trim()
+        if (clean.isEmpty()) return false
+        if (clean.contains("•") || clean.contains("·")) return true
+        
+        val hasTime = clean.contains("min") || clean.contains("hr") || clean.contains("h ") || clean.contains("mins")
+        val hasDist = clean.contains("mi") || clean.contains("km") || clean.contains("miles")
+        if (hasTime && hasDist) return true
+        
+        if (clean.matches(Regex("""^\s*\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?\s*$"""))) return true
+        return false
+    }
+
+    private fun isManeuverDistanceString(str: String): Boolean {
+        val clean = str.trim().lowercase()
+        if (clean.isEmpty()) return false
+        if (clean.contains("•") || clean.contains("·") || clean.contains("min") || clean.contains("hr")) return false
+        val distanceRegex = Regex("""^\s*\d+(?:[\s.,]\d+)?\s*(?:ft|feet|mi|miles|m|meters|km|км|м|yards|yd|yds)\s*$""")
+        return clean.matches(distanceRegex)
+    }
+
+    private fun containsTripOrDistance(str: String): Boolean {
+        val lower = str.lowercase().trim()
+        if (lower.isEmpty()) return false
+        if (lower.contains("•") || lower.contains("·")) return true
+        
+        val timeRegex = Regex("""\b\d{1,2}:\d{2}\s*(?:am|pm)?\b""")
+        if (timeRegex.containsMatchIn(lower)) return true
+        
+        val distanceRegex = Regex("""\b\d+(?:[\s.,]\d+)?\s*(?:mi|miles|km|kilometers|ft|feet|meters|yards|yd|yds)\b""")
+        val metersRegex = Regex("""\b\d+\s*(?:m|м)\b""")
+        if (distanceRegex.containsMatchIn(lower) || metersRegex.containsMatchIn(lower)) return true
+        
+        val durationRegex = Regex("""\b\d+(?:[\s.,]\d+)?\s*(?:min|mins|minutes|hr|hrs|hour|hours|h)\b""")
+        if (durationRegex.containsMatchIn(lower)) return true
+        
+        return false
+    }
+
+    private fun cleanRoadName(road: String): String {
+        var result = road.trim()
+        if (result.endsWith(".")) {
+            result = result.substring(0, result.length - 1).trim()
+        }
+        val trailingDistanceRegex = Regex("""(?i)\s+in\s+\d+(?:[\s.,]\d+)?\s*(?:ft|feet|mi|miles|m|meters|km|км|м|yards|yd|yds)\s*$""")
+        result = result.replace(trailingDistanceRegex, "").trim()
+        val separatorIndex = result.indexOfAny(charArrayOf('•', '·'))
+        if (separatorIndex != -1) {
+            result = result.substring(0, separatorIndex).trim()
+        }
+        return result
+    }
+
+    private fun isVoiceRecorderNotification(sbn: StatusBarNotification): Boolean {
+        val packageName = sbn.packageName.lowercase()
+        val notification = sbn.notification
+        val extras = notification.extras ?: Bundle()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
+        val subtext = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.lowercase() ?: ""
+        
+        // 1. Exclude screen recording
+        if (isScreenRecordingNotification(sbn)) return false
+        
+        // 2. Exclude call recording
+        if (title.contains("call recording") || text.contains("recording call")) return false
+
+        // 3. Match package name
+        val isKnownRecorderPkg = packageName.contains("recorder") || 
+                packageName.contains("voicenote") || 
+                packageName.contains("soundrec") || 
+                packageName.contains("audiorec") ||
+                packageName == "com.sec.android.app.voicenote" ||
+                packageName == "com.google.android.apps.recorder" ||
+                packageName == "com.android.soundrecorder" ||
+                packageName == "com.miui.soundrecorder"
+
+        if (!isKnownRecorderPkg) return false
+
+        // 4. Verify actions exist and match recorder semantics
+        val actions = notification.actions ?: return false
+        val actionTitles = actions.map { it.title.toString().lowercase() }
+        
+        val hasPauseOrResume = actionTitles.any { it.contains("pause") || it.contains("resume") || it.contains("record") || it.contains("continue") }
+        val hasStopOrSave = actionTitles.any { it.contains("stop") || it.contains("save") || it.contains("discard") || it.contains("done") || it.contains("finish") }
+        
+        if (hasPauseOrResume && hasStopOrSave) {
+            return true
+        }
+        
+        val hasRecordingKeywords = title.contains("recording") || title.contains("voice memo") || text.contains("recording") || title.contains("dictaphone")
+        val durationRegex = Regex("""\b\d{1,2}:\d{2}(?::\d{2})?\b""")
+        val hasDuration = durationRegex.containsMatchIn(title) || durationRegex.containsMatchIn(text) || durationRegex.containsMatchIn(subtext)
+        
+        if (hasRecordingKeywords && hasDuration) {
+            return true
+        }
+        
+        return false
+    }
 }
+

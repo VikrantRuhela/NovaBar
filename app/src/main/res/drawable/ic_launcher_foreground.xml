@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Left Eye (Rounded Capsule centered at 37, 54) -->
+    <path
+        android:fillColor="@color/ic_launcher_foreground_color"
+        android:pathData="M 32,49 A 5,5 0 0 1 42,49 V 59 A 5,5 0 0 1 32,59 Z" />
+    <!-- Right Eye (Rounded Capsule centered at 71, 54) -->
+    <path
+        android:fillColor="@color/ic_launcher_foreground_color"
+        android:pathData="M 66,49 A 5,5 0 0 1 76,49 V 59 A 5,5 0 0 1 66,59 Z" />
+    <!-- Floating Connector Line (centered at 54, 54) -->
+    <path
+        android:strokeColor="@color/ic_launcher_foreground_color"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M 49.5,54 L 58.5,54" />
+</vector>

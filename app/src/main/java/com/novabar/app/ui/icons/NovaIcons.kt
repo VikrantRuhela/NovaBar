@@ -33,4 +33,13 @@ object NovaIcons {
     val Check = R.drawable.ic_nova_check
     val Info = R.drawable.ic_nova_info
     val Warning = R.drawable.ic_nova_warning
+    
+    // Control Buttons
+    val Close = R.drawable.ic_nova_close
+    val Play = R.drawable.ic_nova_play
+    val Pause = R.drawable.ic_nova_pause
+    val Reset = R.drawable.ic_nova_reset
+    val VoiceRecorder = R.drawable.ic_nova_mic
+    val Stop = R.drawable.ic_nova_stop
+    val Delete = R.drawable.ic_nova_delete
 }

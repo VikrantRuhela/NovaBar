@@ -3,4 +3,65 @@
     <string name="app_name">Nova Bar</string>
     <string name="notification_listener_label">Nova Bar Notification &amp; Media Service</string>
     <string name="accessibility_service_label">Nova Bar Color Adapter Service</string>
+
+    <!-- NovaGuy Messages -->
+    <!-- Greetings -->
+    <string name="novaguy_msg_greet_1">Hey! 👋</string>
+    <string name="novaguy_msg_greet_2">Welcome back.</string>
+    <string name="novaguy_msg_greet_3">Nice to see you.</string>
+    <string name="novaguy_msg_greet_4">Hope you\'re having a great day.</string>
+
+    <!-- Friendly -->
+    <string name="novaguy_msg_friend_1">Just checking in.</string>
+    <string name="novaguy_msg_friend_2">Everything going well?</string>
+    <string name="novaguy_msg_friend_3">Hope you\'re smiling today.</string>
+    <string name="novaguy_msg_friend_4">Glad you\'re here.</string>
+
+    <!-- Motivation -->
+    <string name="novaguy_msg_motiv_1">One small step is still progress.</string>
+    <string name="novaguy_msg_motiv_2">Keep going.</string>
+    <string name="novaguy_msg_motiv_3">You\'re doing great.</string>
+    <string name="novaguy_msg_motiv_4">You\'ve got this.</string>
+
+    <!-- Wellness -->
+    <string name="novaguy_msg_well_1">Drink some water 💧</string>
+    <string name="novaguy_msg_well_2">Stretch a little.</string>
+    <string name="novaguy_msg_well_3">Give your eyes a short break.</string>
+    <string name="novaguy_msg_well_4">A few deep breaths never hurt.</string>
+
+    <!-- Fun -->
+    <string name="novaguy_msg_fun_1">Still scrolling? 😄</string>
+    <string name="novaguy_msg_fun_2">Found anything interesting?</string>
+    <string name="novaguy_msg_fun_3">I\'m just keeping watch.</string>
+    <string name="novaguy_msg_fun_4">Another adventure today?</string>
+
+    <!-- Context Aware Messages -->
+    <!-- Morning -->
+    <string name="novaguy_msg_morning_1">Good morning! ☀️</string>
+    <string name="novaguy_msg_morning_2">Hope today treats you well.</string>
+    <string name="novaguy_msg_morning_3">A fresh start.</string>
+
+    <!-- Afternoon -->
+    <string name="novaguy_msg_afternoon_1">Hope your day\'s going well.</string>
+    <string name="novaguy_msg_afternoon_2">Keep the momentum going.</string>
+
+    <!-- Evening -->
+    <string name="novaguy_msg_evening_1">Long day?</string>
+    <string name="novaguy_msg_evening_2">Take things easy.</string>
+
+    <!-- Late Night -->
+    <string name="novaguy_msg_latenight_1">You\'re still awake? 🌙</string>
+    <string name="novaguy_msg_latenight_2">Don\'t forget to rest.</string>
+
+    <!-- Charging -->
+    <string name="novaguy_msg_charging_1">Charging up. ⚡</string>
+    <string name="novaguy_msg_charging_2">A little energy goes a long way.</string>
+
+    <!-- Battery Low -->
+    <string name="novaguy_msg_batterylow_1">Looks like power is running low.</string>
+    <string name="novaguy_msg_batterylow_2">Maybe it\'s charging time.</string>
+
+    <!-- Music Playing -->
+    <string name="novaguy_msg_music_1">Nice choice. 🎵</string>
+    <string name="novaguy_msg_music_2">Enjoy the music.</string>
 </resources>

@@ -62,7 +62,17 @@ data class NovaSettings(
     val torchEnabled: Boolean = true,
     val hotspotEnabled: Boolean = true,
     val debugModeEnabled: Boolean = false,
-    val pillTextSize: Float = 0.0f
+    val pillTextSize: Float = 0.0f,
+    val voiceRecorderEnabled: Boolean = true,
+    val alwaysOnNovaGuy: Boolean = true,
+    val novaGuyMinInterval: Int = 5,
+    val novaGuyMaxInterval: Int = 10,
+    val lockscreenGuardianEnabled: Boolean = true,
+    val enableNovaGuyMessages: Boolean = true,
+    val contextAwareMessagesEnabled: Boolean = true,
+    val pillAppearanceStyle: String = "Auto",
+    val pillCustomColor: Int = 0xFF1E88E5.toInt(),
+    val appIconMode: String = "Automatic"
 )
 
 class SettingsRepository(private val context: Context) {
@@ -115,6 +125,16 @@ class SettingsRepository(private val context: Context) {
         private val HOTSPOT_ENABLED = booleanPreferencesKey("hotspot_enabled")
         private val DEBUG_MODE_ENABLED = booleanPreferencesKey("debug_mode_enabled")
         private val PILL_TEXT_SIZE = floatPreferencesKey("pill_text_size")
+        private val VOICE_RECORDER_ENABLED = booleanPreferencesKey("voice_recorder_enabled")
+        private val ALWAYS_ON_NOVAGUY = booleanPreferencesKey("always_on_novaguy")
+        private val NOVAGUY_MIN_INTERVAL = intPreferencesKey("novaguy_min_interval")
+        private val NOVAGUY_MAX_INTERVAL = intPreferencesKey("novaguy_max_interval")
+        private val LOCKSCREEN_GUARDIAN_ENABLED = booleanPreferencesKey("lockscreen_guardian_enabled")
+        private val ENABLE_NOVAGUY_MESSAGES = booleanPreferencesKey("enable_novaguy_messages")
+        private val CONTEXT_AWARE_MESSAGES_ENABLED = booleanPreferencesKey("context_aware_messages_enabled")
+        private val PILL_APPEARANCE_STYLE = stringPreferencesKey("pill_appearance_style")
+        private val PILL_CUSTOM_COLOR = intPreferencesKey("pill_custom_color")
+        private val APP_ICON_MODE = stringPreferencesKey("app_icon_mode")
     }
 
     val settingsFlow: Flow<NovaSettings> = context.dataStore.data.map { preferences ->
@@ -166,7 +186,17 @@ class SettingsRepository(private val context: Context) {
             torchEnabled = preferences[TORCH_ENABLED] ?: true,
             hotspotEnabled = preferences[HOTSPOT_ENABLED] ?: true,
             debugModeEnabled = preferences[DEBUG_MODE_ENABLED] ?: false,
-            pillTextSize = preferences[PILL_TEXT_SIZE] ?: 0.0f
+            pillTextSize = preferences[PILL_TEXT_SIZE] ?: 0.0f,
+            voiceRecorderEnabled = preferences[VOICE_RECORDER_ENABLED] ?: true,
+            alwaysOnNovaGuy = preferences[ALWAYS_ON_NOVAGUY] ?: true,
+            novaGuyMinInterval = preferences[NOVAGUY_MIN_INTERVAL] ?: 5,
+            novaGuyMaxInterval = preferences[NOVAGUY_MAX_INTERVAL] ?: 10,
+            lockscreenGuardianEnabled = preferences[LOCKSCREEN_GUARDIAN_ENABLED] ?: true,
+            enableNovaGuyMessages = preferences[ENABLE_NOVAGUY_MESSAGES] ?: true,
+            contextAwareMessagesEnabled = preferences[CONTEXT_AWARE_MESSAGES_ENABLED] ?: true,
+            pillAppearanceStyle = preferences[PILL_APPEARANCE_STYLE] ?: "Auto",
+            pillCustomColor = preferences[PILL_CUSTOM_COLOR] ?: 0xFF1E88E5.toInt(),
+            appIconMode = preferences[APP_ICON_MODE] ?: "Automatic"
         )
     }
 
@@ -214,6 +244,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[NOTIFICATIONS_ENABLED] = enabled }
+    }
+
+    suspend fun updateVoiceRecorderEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[VOICE_RECORDER_ENABLED] = enabled }
     }
 
     suspend fun updateColorAdaptationEnabled(enabled: Boolean) {
@@ -372,6 +406,42 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[PILL_TEXT_SIZE] = size }
     }
 
+    suspend fun updateAlwaysOnNovaGuy(enabled: Boolean) {
+        context.dataStore.edit { it[ALWAYS_ON_NOVAGUY] = enabled }
+    }
+
+    suspend fun updateNovaGuyMinInterval(min: Int) {
+        context.dataStore.edit { it[NOVAGUY_MIN_INTERVAL] = min }
+    }
+
+    suspend fun updateNovaGuyMaxInterval(max: Int) {
+        context.dataStore.edit { it[NOVAGUY_MAX_INTERVAL] = max }
+    }
+
+    suspend fun updateLockscreenGuardianEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[LOCKSCREEN_GUARDIAN_ENABLED] = enabled }
+    }
+
+    suspend fun updateEnableNovaGuyMessages(enabled: Boolean) {
+        context.dataStore.edit { it[ENABLE_NOVAGUY_MESSAGES] = enabled }
+    }
+
+    suspend fun updateContextAwareMessagesEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[CONTEXT_AWARE_MESSAGES_ENABLED] = enabled }
+    }
+
+    suspend fun updatePillAppearanceStyle(style: String) {
+        context.dataStore.edit { it[PILL_APPEARANCE_STYLE] = style }
+    }
+
+    suspend fun updatePillCustomColor(color: Int) {
+        context.dataStore.edit { it[PILL_CUSTOM_COLOR] = color }
+    }
+
+    suspend fun updateAppIconMode(mode: String) {
+        context.dataStore.edit { it[APP_ICON_MODE] = mode }
+    }
+
     suspend fun importSettings(s: NovaSettings) {
         context.dataStore.edit { preferences ->
             preferences[IS_ENABLED] = s.isEnabled
@@ -423,6 +493,16 @@ class SettingsRepository(private val context: Context) {
             preferences[HOTSPOT_ENABLED] = s.hotspotEnabled
             preferences[DEBUG_MODE_ENABLED] = s.debugModeEnabled
             preferences[PILL_TEXT_SIZE] = s.pillTextSize
+            preferences[VOICE_RECORDER_ENABLED] = s.voiceRecorderEnabled
+            preferences[ALWAYS_ON_NOVAGUY] = s.alwaysOnNovaGuy
+            preferences[NOVAGUY_MIN_INTERVAL] = s.novaGuyMinInterval
+            preferences[NOVAGUY_MAX_INTERVAL] = s.novaGuyMaxInterval
+            preferences[LOCKSCREEN_GUARDIAN_ENABLED] = s.lockscreenGuardianEnabled
+            preferences[ENABLE_NOVAGUY_MESSAGES] = s.enableNovaGuyMessages
+            preferences[CONTEXT_AWARE_MESSAGES_ENABLED] = s.contextAwareMessagesEnabled
+            preferences[PILL_APPEARANCE_STYLE] = s.pillAppearanceStyle
+            preferences[PILL_CUSTOM_COLOR] = s.pillCustomColor
+            preferences[APP_ICON_MODE] = s.appIconMode
         }
     }
 }
