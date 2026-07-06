@@ -243,7 +243,14 @@ fun NovaBarUi() {
         factory = ViewModelFactory(context)
     )
 
-    val activeStateKey by remember {
+    val isExpanded by OverlayStateManager.isExpanded.collectAsState()
+    val expansionFraction by animateFloatAsState(
+        targetValue = if (isExpanded) 1f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        label = "expansionFraction"
+    )
+
+    val rawActiveStateKey by remember {
         viewModel.activeState.map { state ->
             when (state) {
                 is OverlayState.Idle -> "Idle"
@@ -261,6 +268,22 @@ fun NovaBarUi() {
             }
         }.distinctUntilChanged()
     }.collectAsState(initial = "Idle")
+
+    var lastExpandedActiveStateKey by remember { mutableStateOf("Idle") }
+    LaunchedEffect(isExpanded, rawActiveStateKey) {
+        if (isExpanded) {
+            lastExpandedActiveStateKey = rawActiveStateKey
+        }
+    }
+
+    val activeStateKey = remember(rawActiveStateKey, isExpanded, expansionFraction) {
+        if (!isExpanded && expansionFraction > 0.01f) {
+            lastExpandedActiveStateKey
+        } else {
+            rawActiveStateKey
+        }
+    }
+
     val settings by viewModel.settingsFlow.collectAsState()
     val isDarkBgFromLuminance by viewModel.isDarkBackground.collectAsState()
     val baseBackgroundColor = when (settings.pillAppearanceStyle) {
@@ -274,7 +297,6 @@ fun NovaBarUi() {
         }
     }
     val isDarkBg = (0.2126f * baseBackgroundColor.red + 0.7152f * baseBackgroundColor.green + 0.0722f * baseBackgroundColor.blue) <= 0.5f
-    val isExpanded by OverlayStateManager.isExpanded.collectAsState()
     val activeList by remember {
         OverlayStateManager.activeActivities.map { list ->
             list.map { it::class.java.simpleName }
@@ -295,11 +317,6 @@ fun NovaBarUi() {
     // Collapse Sequencing state for Charging view
     var resolvedExpandedCharging by remember { mutableStateOf(isExpanded) }
     val contentAlpha = remember { androidx.compose.animation.core.Animatable(if (isExpanded) 1f else 0f) }
-    val expansionFraction by animateFloatAsState(
-        targetValue = if (isExpanded) 1f else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
-        label = "expansionFraction"
-    )
 
     LaunchedEffect(isExpanded, activeStateKey) {
         if (activeStateKey == "Charging") {
