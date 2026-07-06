@@ -235,9 +235,9 @@ Nova Bar was inspired by modern live activity systems and Samsung's Now Bar expe
 ---
 ## License
 
-Nova Bar is licensed under the MIT License.
+Nova Bar is licensed under the GNU General Public License v3.0 (GPL-3.0).
 
-You are free to use, modify, distribute, and fork this project in accordance with the terms of the license.
+Nova Bar is open source and welcomes community contributions. GPL-3.0 ensures that anyone distributing modified versions of Nova Bar must also make their source code available under the same license, keeping improvements open for everyone.
 
 See the [LICENSE](LICENSE) file for full details.
 
