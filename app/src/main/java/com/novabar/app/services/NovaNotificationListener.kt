@@ -389,7 +389,7 @@ class NovaNotificationListener : NotificationListenerService() {
             if (text.isEmpty()) return null
             val clean = text.trim()
             
-            // 1. Try to extract colon-separated time: hh:mm:ss.SS, mm:ss.SS, hh:mm:ss, mm:ss anywhere in the string
+          
             val colonRegex = "(?:\\b(\\d{1,2}):)?(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?".toRegex()
             val colonMatch = colonRegex.find(clean)
             if (colonMatch != null) {
@@ -425,11 +425,11 @@ class NovaNotificationListener : NotificationListenerService() {
                     
                     return (hrs * 3600 + mins * 60 + secs) * 1000L + ms
                 } catch (e: Exception) {
-                    // Ignore and try next method
+                 
                 }
             }
             
-            // 2. Try decimal or integer values followed by h, m, s, min, mins, minutes, second, seconds, etc.
+         
             try {
                 var totalMs = 0L
                 val regex = "(\\d+(?:\\.\\d+)?)\\s*([hms])".toRegex()
@@ -449,7 +449,7 @@ class NovaNotificationListener : NotificationListenerService() {
                 // Ignore
             }
 
-            // 3. Try pure decimal or integer seconds: e.g. "13.42" or "13"
+         
             val decimalSecRegex = "^\\s*(\\d+)(?:\\.(\\d{1,3}))?\\s*$".toRegex()
             val decimalSecMatch = decimalSecRegex.find(clean)
             if (decimalSecMatch != null) {
@@ -539,13 +539,13 @@ class NovaNotificationListener : NotificationListenerService() {
         try {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionsChangedListener)
         } catch (e: Exception) {
-            // Already removed or failed
+            
         }
         for (callback in activeControllers.values) {
             try {
                 callback.unregister()
             } catch (e: Exception) {
-                // Ignore
+                /
             }
         }
         activeControllers.clear()
@@ -853,7 +853,7 @@ class NovaNotificationListener : NotificationListenerService() {
                     val subtext = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
                     val eta = extras.getCharSequence("android.car.EXTENSIONS")?.toString() ?: "" // Fallback
                     
-                    // 1. Try to extract RemoteViews drawable (LiveBridge approach)
+                    // 1. Try to extract RemoteViews drawable
                     var drawable = com.novabar.app.utils.NavigationCompatibilityLayer.extractManeuverDrawable(sbn, this@NovaNotificationListener)
                     var drawableSource = "RemoteViews (LiveBridge)"
                     
@@ -1010,7 +1010,7 @@ class NovaNotificationListener : NotificationListenerService() {
                         parsedEta = eta
                     }
 
-                    // 3. Distance to next maneuver (LiveBridge regex implementation, filtering out trip info)
+                    // 3. Distance to next maneuver
                     val liveBridgeDistancePattern = Regex("""(?i)(?<!\d)\d{1,4}(?:[\s.,]\d{1,2})?\s*(?:км|km|м|m|mi|ft|миль|фут|公里|公尺|米|yards|yd|yds|feet)\b""")
                     
                     if (parsedDistanceRemaining.isEmpty()) {
