@@ -17,3 +17,16 @@ capture.png
 keystore.properties
 *.jks
 *.keystore
+
+# Secret properties and key files
+key.properties
+signing.properties
+
+# Private key & certificate formats
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Environment files
+.env

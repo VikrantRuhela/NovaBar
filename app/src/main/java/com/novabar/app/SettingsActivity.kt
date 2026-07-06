@@ -1215,10 +1215,9 @@ fun AppIconSettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val options = listOf(
-                    "Automatic" to "Follows system theme (Midnight in Dark mode, Frost in Light mode, Material You if enabled).",
+                    "Automatic" to "Follows system theme (Midnight in Dark mode, Frost in Light mode).",
                     "Midnight" to "Always use the dark NovaGuy icon (Deep black background, white logo).",
-                    "Frost" to "Always use the light NovaGuy icon (Pure white background, black logo).",
-                    "Material You" to "Always request the Android monochrome themed icon (launcher dependent)."
+                    "Frost" to "Always use the light NovaGuy icon (Pure white background, black logo)."
                 )
 
                 options.forEach { (title, description) ->
@@ -1258,34 +1257,6 @@ fun AppIconSettingsScreen(
                             )
                         }
                     }
-                }
-            }
-        }
-
-        // Info box for Material You
-        if (settings.appIconMode == "Material You") {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        painter = painterResource(id = NovaIcons.Info),
-                        contentDescription = "Info",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Material You themed icons depend on launcher support. If your launcher does not support them, the icon will fallback to follow the default system theme gracefully.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
                 }
             }
         }

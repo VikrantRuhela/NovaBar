@@ -11,8 +11,7 @@ object AppIconManager {
     private val ALIASES = listOf(
         "com.novabar.app.SettingsActivityAliasAutomatic",
         "com.novabar.app.SettingsActivityAliasMidnight",
-        "com.novabar.app.SettingsActivityAliasFrost",
-        "com.novabar.app.SettingsActivityAliasMaterialYou"
+        "com.novabar.app.SettingsActivityAliasFrost"
     )
 
     fun switchIcon(context: Context, mode: String) {
@@ -20,29 +19,36 @@ object AppIconManager {
             "Automatic" -> "com.novabar.app.SettingsActivityAliasAutomatic"
             "Midnight" -> "com.novabar.app.SettingsActivityAliasMidnight"
             "Frost" -> "com.novabar.app.SettingsActivityAliasFrost"
-            "Material You" -> "com.novabar.app.SettingsActivityAliasMaterialYou"
             else -> "com.novabar.app.SettingsActivityAliasAutomatic"
         }
 
         val pm = context.packageManager
 
+        // 1. Enable the new target alias first to ensure there is always at least one enabled launcher entry point.
+        try {
+            pm.setComponentEnabledSetting(
+                ComponentName(context, targetAlias),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            Log.d(TAG, "Enabled target alias: $targetAlias first")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to enable target alias $targetAlias", e)
+        }
+
+        // 2. Disable all other aliases afterward.
         for (alias in ALIASES) {
-            val componentName = ComponentName(context, alias)
-            val newState = if (alias == targetAlias) {
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            } else {
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            }
-            try {
-                // To avoid killing the app if we only switch icon state, we use DONT_KILL_APP
-                pm.setComponentEnabledSetting(
-                    componentName,
-                    newState,
-                    PackageManager.DONT_KILL_APP
-                )
-                Log.d(TAG, "Alias $alias set to state: $newState")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to set alias $alias component enabled state", e)
+            if (alias != targetAlias) {
+                try {
+                    pm.setComponentEnabledSetting(
+                        ComponentName(context, alias),
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        PackageManager.DONT_KILL_APP
+                    )
+                    Log.d(TAG, "Disabled alias: $alias")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to disable alias $alias", e)
+                }
             }
         }
     }

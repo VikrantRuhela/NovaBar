@@ -126,127 +126,118 @@ object GoogleMapsProvider : NavigationProvider {
         rv: RemoteViews?,
         resources: android.content.res.Resources
     ): Int? {
-        val actions = getRemoteViewActions(rv)
-        if (actions.isEmpty()) {
+        val actions = retrieveActionsList(rv)
+        if (actions.isEmpty()) return null
+
+        for (action in actions) {
+            val scannedId = scanActionObject(action, resources)
+            if (scannedId != null) {
+                return scannedId
+            }
+        }
+        return null
+    }
+
+    private fun retrieveActionsList(rv: RemoteViews?): List<Any> {
+        rv ?: return emptyList()
+        return runCatching {
+            val field = rv.javaClass.getDeclaredField("mActions")
+            field.isAccessible = true
+            (field.get(rv) as? List<*>)?.filterNotNull() ?: emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun scanActionObject(action: Any, resources: android.content.res.Resources): Int? {
+        val actionClass = action.javaClass
+        val className = actionClass.name.lowercase(Locale.ROOT)
+        
+        var hasImageContext = className.contains("image") || 
+                              className.contains("icon") || 
+                              className.contains("drawable")
+
+        val fieldsList = mutableListOf<java.lang.reflect.Field>()
+        var current: Class<*>? = actionClass
+        while (current != null && current != Any::class.java) {
+            fieldsList.addAll(current.declaredFields)
+            current = current.superclass
+        }
+
+        for (field in fieldsList) {
+            field.isAccessible = true
+            val value = runCatching { field.get(action) }.getOrNull() ?: continue
+            if (value is String) {
+                val str = value.lowercase(Locale.ROOT)
+                if (str.contains("image") || str.contains("icon") || str.contains("drawable")) {
+                    hasImageContext = true
+                }
+            }
+        }
+
+        if (!hasImageContext) return null
+
+        for (field in fieldsList) {
+            val fieldName = field.name.lowercase(Locale.ROOT)
+            val matchesTypeOrName = field.type == Int::class.java || 
+                                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && field.type == android.graphics.drawable.Icon::class.java) ||
+                                    fieldName.contains("res") || 
+                                    fieldName.contains("icon") || 
+                                    fieldName.contains("drawable") || 
+                                    fieldName.contains("value")
+
+            if (matchesTypeOrName) {
+                val fieldValue = runCatching { field.get(action) }.getOrNull() ?: continue
+                val resId = locateDrawableResourceId(fieldValue, resources)
+                if (resId != null) return resId
+            }
+        }
+        return null
+    }
+
+    private fun locateDrawableResourceId(value: Any, resources: android.content.res.Resources): Int? {
+        if (value is Int) {
+            if (value > 0 && isResourceValid(resources, value)) return value
             return null
         }
 
-        for (action in actions) {
-            val fields = collectAllDeclaredFields(action.javaClass)
-            val actionClassName = action.javaClass.name.lowercase(Locale.ROOT)
-            var methodName = ""
-            val candidates = mutableListOf<Pair<String, Int>>()
-
-            for (field in fields) {
-                val value = runCatching {
-                    field.isAccessible = true
-                    field.get(action)
-                }.getOrNull() ?: continue
-                val normalizedName = field.name.removePrefix("m").lowercase(Locale.ROOT)
-                if (normalizedName == "methodname" && value is String) {
-                    methodName = value.lowercase(Locale.ROOT)
-                }
-                candidates.addAll(extractDrawableResIdCandidates(value, normalizedName))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && value is android.graphics.drawable.Icon) {
+            if (value.type == android.graphics.drawable.Icon.TYPE_RESOURCE) {
+                val id = value.resId
+                if (id > 0 && isResourceValid(resources, id)) return id
             }
+            return null
+        }
 
-            val looksLikeImageAction =
-                methodName.contains("icon") ||
-                        methodName.contains("image") ||
-                        methodName.contains("drawable") ||
-                        actionClassName.contains("icon") ||
-                        actionClassName.contains("image") ||
-                        actionClassName.contains("drawable")
-            if (!looksLikeImageAction) {
-                continue
-            }
-
-            for ((fieldName, resId) in candidates) {
-                val isResourceField =
-                    fieldName.contains("res") ||
-                            fieldName.contains("icon") ||
-                            fieldName.contains("drawable") ||
-                            fieldName.contains("value")
-                if (!isResourceField) {
-                    continue
+        when (value) {
+            is IntArray -> {
+                for (item in value) {
+                    if (item > 0 && isResourceValid(resources, item)) return item
                 }
-                if (isDrawableResource(resources, resId)) {
-                    return resId
+            }
+            is Array<*> -> {
+                for (item in value) {
+                    if (item != null) {
+                        val id = locateDrawableResourceId(item, resources)
+                        if (id != null) return id
+                    }
+                }
+            }
+            is Iterable<*> -> {
+                for (item in value) {
+                    if (item != null) {
+                        val id = locateDrawableResourceId(item, resources)
+                        if (id != null) return id
+                    }
                 }
             }
         }
         return null
     }
 
-    private fun extractDrawableResIdCandidates(value: Any, fieldName: String): List<Pair<String, Int>> {
-        val candidates = mutableListOf<Pair<String, Int>>()
-        when (value) {
-            is Int -> {
-                if (value > 0) {
-                    candidates += fieldName to value
-                }
-            }
-            is IntArray -> {
-                value.filter { it > 0 }.forEachIndexed { index, item ->
-                    candidates += "$fieldName:$index" to item
-                }
-            }
-            is Array<*> -> {
-                value.forEachIndexed { index, item ->
-                    if (item != null) {
-                        candidates += extractDrawableResIdCandidates(item, "$fieldName:$index")
-                    }
-                }
-            }
-            is List<*> -> {
-                value.forEachIndexed { index, item ->
-                    if (item != null) {
-                        candidates += extractDrawableResIdCandidates(item, "$fieldName:$index")
-                    }
-                }
-            }
-            else -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                    value is android.graphics.drawable.Icon &&
-                    value.type == android.graphics.drawable.Icon.TYPE_RESOURCE
-                ) {
-                    val resId = value.resId
-                    if (resId > 0) {
-                        candidates += "$fieldName:icon" to resId
-                    }
-                }
-            }
-        }
-        return candidates
-    }
-
-    private fun getRemoteViewActions(rv: RemoteViews?): List<Any> {
-        rv ?: return emptyList()
-        return try {
-            val actionsField = rv.javaClass.getDeclaredField("mActions")
-            actionsField.isAccessible = true
-            (actionsField.get(rv) as? List<*>)?.filterNotNull() ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun collectAllDeclaredFields(clazz: Class<*>): List<java.lang.reflect.Field> {
-        val fields = mutableListOf<java.lang.reflect.Field>()
-        var current: Class<*>? = clazz
-        while (current != null && current != Any::class.java) {
-            fields.addAll(current.declaredFields)
-            current = current.superclass
-        }
-        return fields
-    }
-
-    private fun isDrawableResource(resources: android.content.res.Resources, resId: Int): Boolean {
-        return try {
-            val typeName = resources.getResourceTypeName(resId)
-            typeName == "drawable" || typeName == "mipmap"
-        } catch (_: Exception) {
-            false
-        }
+    private fun isResourceValid(resources: android.content.res.Resources, resId: Int): Boolean {
+        return runCatching {
+            val type = resources.getResourceTypeName(resId)
+            type == "drawable" || type == "mipmap"
+        }.getOrDefault(false)
     }
 
     private fun mapResourceNameToManeuverType(resName: String): ManeuverType? {
