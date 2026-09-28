@@ -246,7 +246,7 @@ fun NovaBarUi() {
     val isExpanded by OverlayStateManager.isExpanded.collectAsState()
     val expansionFraction by animateFloatAsState(
         targetValue = if (isExpanded) 1f else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "expansionFraction"
     )
 
@@ -314,47 +314,10 @@ fun NovaBarUi() {
 
     var userInteractionTick by remember { mutableStateOf(0L) }
 
-    // Collapse Sequencing state for Charging view
-    var resolvedExpandedCharging by remember { mutableStateOf(isExpanded) }
-    val contentAlpha = remember { androidx.compose.animation.core.Animatable(if (isExpanded) 1f else 0f) }
-
-    LaunchedEffect(isExpanded, activeStateKey) {
-        if (activeStateKey == "Charging") {
-            if (isExpanded) {
-                resolvedExpandedCharging = true
-                contentAlpha.animateTo(1f, animationSpec = tween(250))
-            } else {
-                contentAlpha.animateTo(0f, animationSpec = tween(250))
-                resolvedExpandedCharging = false
-            }
-        } else {
-            resolvedExpandedCharging = isExpanded
-            contentAlpha.snapTo(if (isExpanded) 1f else 0f)
-        }
-    }
-
-    val targetState = when (activeStateKey) {
-        "Media" -> {
-            when (settings.defaultPresentationMode) {
-                "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
-                "Expanded" -> NowBarState.EXPANDED
-                else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
-            }
-        }
-        "Charging" -> {
-            when (settings.defaultPresentationMode) {
-                "Minimized" -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.MINIMIZED
-                "Expanded" -> NowBarState.EXPANDED
-                else -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.COMPACT
-            }
-        }
-        else -> {
-            when (settings.defaultPresentationMode) {
-                "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
-                "Expanded" -> NowBarState.EXPANDED
-                else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
-            }
-        }
+    val targetState = when (settings.defaultPresentationMode) {
+        "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
+        "Expanded" -> NowBarState.EXPANDED
+        else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
     }
 
     var lastTargetState by remember { mutableStateOf<NowBarState?>(null) }
@@ -433,13 +396,12 @@ fun NovaBarUi() {
     // Dynamic color styling
     val foregroundColor by animateColorAsState(
         targetValue = if (isDarkBg) Color.White else Color.Black,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
         label = "ForegroundColor"
     )
 
     val targetColor = baseBackgroundColor.copy(alpha = settings.opacity)
     
-    // Apply glass tint composite color
     val extColor = extractedColor
     val backgroundColor by animateColorAsState(
         targetValue = if (extColor != null) {
@@ -453,13 +415,13 @@ fun NovaBarUi() {
         } else {
             targetColor
         },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
         label = "BackgroundColor"
     )
 
     val borderColor by animateColorAsState(
         targetValue = if (isDarkBg) GlassBorderDark else GlassBorderLight,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
         label = "BorderColor"
     )
 
@@ -473,18 +435,21 @@ fun NovaBarUi() {
     // Dimensions
     val borderThickness = settings.barBorderThickness.dp
 
+    val displayMetrics = LocalContext.current.resources.displayMetrics
+    val density = displayMetrics.density
+    val screenWidthDp = displayMetrics.widthPixels.toFloat() / density
+
     val baseTargetWidth = when (targetState) {
         NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
         NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
-        NowBarState.EXPANDED -> 290.dp
+        NowBarState.EXPANDED -> screenWidthDp.dp
     }
 
     val cameraCutoutModeEnabled = settings.cameraCutoutMode
     val hasCenteredPunchHole by com.novabar.app.utils.CutoutManager.hasCenteredPunchHole.collectAsState()
     
-    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT) && expansionFraction == 0f
+    val isSplitLayout = cameraCutoutModeEnabled && (targetState == NowBarState.MINIMIZED || targetState == NowBarState.COMPACT)
     
-    val density = LocalContext.current.resources.displayMetrics.density
     val cutoutWidthPx = com.novabar.app.utils.CutoutManager.cutoutWidth.collectAsState().value
     val cutoutWidthDp = (cutoutWidthPx / density).dp
     val safetyPadding = 12.dp
@@ -494,24 +459,24 @@ fun NovaBarUi() {
         36.dp
     }
 
-    val targetGap = baseGap * settings.cameraCutoutGapScale
+    val targetGap = (baseGap * settings.cameraCutoutGapScale).coerceAtLeast(0.dp)
 
     // Gap Animation:
     val gapWidth by animateDpAsState(
         targetValue = targetGap,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "cameraGap"
     )
 
     val animatedLeftSegmentWidth by animateDpAsState(
         targetValue = if (isSplitLayout) (settings.leftSegmentWidthDp * settings.barWidthScale).dp else settings.leftSegmentWidthDp.dp,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "leftSegmentWidth"
     )
 
     val animatedRightSegmentWidth by animateDpAsState(
         targetValue = if (isSplitLayout) (settings.rightSegmentWidthDp * settings.barWidthScale).dp else settings.rightSegmentWidthDp.dp,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "rightSegmentWidth"
     )
 
@@ -550,10 +515,10 @@ fun NovaBarUi() {
 
     val animatedWidth by animateDpAsState(
         targetValue = targetWidth,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "animatedWidth",
         finishedListener = { width ->
-            if (targetState == NowBarState.EXPANDED && width == 290.dp) {
+            if (targetState == NowBarState.EXPANDED && width == screenWidthDp.dp) {
                 val elapsed = System.currentTimeMillis() - DiagnosticsManager.expandClickTime
                 Log.d("NovaBar", "MEDIA_EXPAND_COMPLETE: elapsed=${elapsed}ms")
             }
@@ -571,11 +536,10 @@ fun NovaBarUi() {
 
     val animatedHeight by animateDpAsState(
         targetValue = targetHeight,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "animatedHeight"
     )
 
-    // Shape Interpolation: animate corner radius continuously between expanded and compact
     val compactCornerRadius = settings.cornerRadius.dp
     val expandedCornerRadius = 28.dp
     val targetCornerRadius = when (targetState) {
@@ -584,7 +548,7 @@ fun NovaBarUi() {
     }
     val animatedCornerRadius by animateDpAsState(
         targetValue = targetCornerRadius,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
         label = "animatedCornerRadius"
     )
 
@@ -630,18 +594,26 @@ fun NovaBarUi() {
     val centerX = winX + winWidth / 2
     val centerY = winY + winHeight / 2
 
-    val rootAlignment = when (settings.barGravity) {
-        "Left" -> Alignment.TopStart
-        "Right" -> Alignment.TopEnd
-        else -> Alignment.TopCenter
+    val baseCompactWidthDp = if (settings.defaultPresentationMode == "Minimized") 115f * settings.barWidthScale else 185f * settings.barWidthScale
+    val offsetXFloat = settings.offsetX.toFloat()
+
+    val compactLeftPosition = when (settings.barGravity) {
+        "Left" -> offsetXFloat.coerceAtLeast(0f)
+        "Right" -> (screenWidthDp - baseCompactWidthDp - offsetXFloat).coerceAtMost(screenWidthDp - baseCompactWidthDp)
+        else -> (screenWidthDp - baseCompactWidthDp) / 2f + offsetXFloat
     }
 
+    val pillLeftInWindowDp = compactLeftPosition * (1f - expansionFraction)
+    val alignOffsetX = pillLeftInWindowDp.dp
+
+    val rootAlignment = Alignment.TopStart
+
     val springSpecFloat = spring<Float>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
+        dampingRatio = Spring.DampingRatioLowBouncy,
         stiffness = 850f
     )
     val springSpecIntOffset = spring<IntOffset>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
+        dampingRatio = Spring.DampingRatioLowBouncy,
         stiffness = 850f
     )
     val translationOffsetPx = (8 * density).roundToInt()
@@ -706,33 +678,15 @@ fun NovaBarUi() {
             fun RenderSegmentContent(segment: SplitSegment?, key: String) {
                 val state = activeStateMap[key]
                 if (state != null) {
-                    val stateTargetState = when (key) {
-                        "Media" -> {
-                            when (settings.defaultPresentationMode) {
-                                "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
-                                "Expanded" -> NowBarState.EXPANDED
-                                else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
-                            }
-                        }
-                        "Charging" -> {
-                            when (settings.defaultPresentationMode) {
-                                "Minimized" -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.MINIMIZED
-                                "Expanded" -> NowBarState.EXPANDED
-                                else -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.COMPACT
-                            }
-                        }
-                        else -> {
-                            when (settings.defaultPresentationMode) {
-                                "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
-                                "Expanded" -> NowBarState.EXPANDED
-                                else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
-                            }
-                        }
+                    val stateTargetState = when (settings.defaultPresentationMode) {
+                        "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                        "Expanded" -> NowBarState.EXPANDED
+                        else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
                     }
                     val stateTargetWidth = when (stateTargetState) {
                         NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
                         NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
-                        NowBarState.EXPANDED -> 290.dp
+                        NowBarState.EXPANDED -> screenWidthDp.dp
                     }
                     val stateTargetHeight = when (stateTargetState) {
                         NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
@@ -740,9 +694,10 @@ fun NovaBarUi() {
                         NowBarState.EXPANDED -> 205.dp
                     }
 
+                    val compactPillHeightDp = (44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp)
                     Box(
-                        modifier = if (segment != null) Modifier.fillMaxSize() else Modifier.requiredSize(stateTargetWidth, stateTargetHeight),
-                        contentAlignment = Alignment.Center
+                        modifier = if (segment != null) Modifier.fillMaxSize() else Modifier.fillMaxSize().then(if (stateTargetState == NowBarState.EXPANDED) Modifier.padding(top = compactPillHeightDp) else Modifier),
+                        contentAlignment = if (stateTargetState == NowBarState.EXPANDED) Alignment.TopCenter else Alignment.Center
                     ) {
                         when (state) {
                             is OverlayState.PhoneCall -> PhoneCallView(state.data, stateTargetState, foregroundColor, textSizeOffset, segment) {
@@ -753,7 +708,7 @@ fun NovaBarUi() {
                                 currentState = stateTargetState,
                                 color = foregroundColor,
                                 textSizeOffset = textSizeOffset,
-                                contentAlpha = contentAlpha.value,
+                                contentAlpha = 1f,
                                 splitSegment = segment
                             )
                             is OverlayState.Notification -> NotificationView(
@@ -945,34 +900,14 @@ fun NovaBarUi() {
             }
 
             val isMultiDashboard = activeActivities.size > 1 && (isExpanded || expansionFraction > 0.01f)
-            val containerAlpha = 1f - expansionFraction
-            val currentBorderColor = if (isMultiDashboard) {
-                borderColor.copy(alpha = containerAlpha)
-            } else if (isSplitLayout) {
-                borderColor
-            } else {
-                Color.Transparent
-            }
-
-            val currentBorderThickness = if (isMultiDashboard) {
-                borderThickness * containerAlpha
-            } else if (isSplitLayout) {
-                borderThickness
-            } else {
-                0.dp
-            }
-
-            val currentBackgroundColor = if (isMultiDashboard) {
-                backgroundColor.copy(alpha = backgroundColor.alpha * containerAlpha)
-            } else if (isSplitLayout) {
-                backgroundColor
-            } else {
-                Color.Transparent
-            }
+            val currentBorderColor = if (isMultiDashboard || isSplitLayout) borderColor else Color.Transparent
+            val currentBorderThickness = if (isMultiDashboard || isSplitLayout) borderThickness else 0.dp
+            val currentBackgroundColor = if (isMultiDashboard || isSplitLayout) baseBackgroundColor.copy(alpha = settings.opacity) else Color.Transparent
             val currentCornerRadius = animatedCornerRadius
 
             Box(
                 modifier = Modifier
+                    .offset(x = alignOffsetX)
                     .width(animatedWidth)
                     .height(animatedHeight)
                     .onGloballyPositioned { coordinates ->
@@ -991,7 +926,13 @@ fun NovaBarUi() {
                 contentAlignment = Alignment.Center
             ) {
                 if (isMultiDashboard) {
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    val compactPillHeightDp = (44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = expansionFraction.coerceIn(0f, 1f) }
+                            .padding(top = compactPillHeightDp)
+                    ) {
                         activeActivities.forEachIndexed { index, activity ->
                             val activityKey = when (activity) {
                                 is OverlayState.Navigation -> "Navigation"
@@ -1009,9 +950,10 @@ fun NovaBarUi() {
                             }
 
                             key(activityKey) {
-                                val isThisCardExpanded = expandedActivityKey == activityKey
+                                val effectiveExpandedKey = if (isExpanded) expandedActivityKey else null
+                                val isThisCardExpanded = effectiveExpandedKey == activityKey
 
-                                val targetCardY = if (expandedActivityKey == null) {
+                                val targetCardY = if (effectiveExpandedKey == null) {
                                     val prevCompactHeightSum = activeActivities.take(index).sumOf { state ->
                                         val h: Int = when (state) {
                                             is OverlayState.Navigation -> 56
@@ -1027,7 +969,7 @@ fun NovaBarUi() {
                                     if (isThisCardExpanded) {
                                         0.dp
                                     } else {
-                                        val expandedIndex = activeActivities.indexOfFirst { act ->
+                                        val expandedIndex = if (effectiveExpandedKey == null) -1 else activeActivities.indexOfFirst { act ->
                                             val actKey = when (act) {
                                                 is OverlayState.Navigation -> "Navigation"
                                                 is OverlayState.Media -> "Media"
@@ -1042,9 +984,9 @@ fun NovaBarUi() {
                                                 is OverlayState.Idle -> "Idle"
                                                 is OverlayState.NovaGuy -> "NovaGuy"
                                             }
-                                            actKey == expandedActivityKey
+                                            actKey == effectiveExpandedKey
                                         }
-                                        if (expandedIndex > index) {
+                                        if (expandedIndex != -1 && expandedIndex > index) {
                                             0.dp
                                         } else {
                                             205.dp
@@ -1052,7 +994,7 @@ fun NovaBarUi() {
                                     }
                                 }
 
-                                val targetCardHeight = if (expandedActivityKey == null) {
+                                val targetCardHeight = if (effectiveExpandedKey == null) {
                                     when (activity) {
                                         is OverlayState.Navigation -> 56.dp
                                         is OverlayState.Media -> 52.dp
@@ -1065,12 +1007,12 @@ fun NovaBarUi() {
 
                                 val animatedCardY by animateDpAsState(
                                     targetValue = targetCardY,
-                                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
                                     label = "animatedCardY_${activityKey}"
                                 )
                                 val animatedCardHeight by animateDpAsState(
                                     targetValue = targetCardHeight,
-                                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
                                     label = "animatedCardHeight_${activityKey}"
                                 )
 
@@ -1078,7 +1020,7 @@ fun NovaBarUi() {
                                     val cardCornerRadius = if (isThisCardExpanded) expandedCornerRadius else compactCornerRadius
                                     val animatedCardCornerRadius by animateDpAsState(
                                         targetValue = cardCornerRadius,
-                                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
                                         label = "animatedCardCornerRadius_${activityKey}"
                                     )
 
@@ -1087,8 +1029,8 @@ fun NovaBarUi() {
                                     Box(
                                         modifier = Modifier
                                             .offset(y = animatedCardY)
-                                            .requiredSize(width = 290.dp, height = animatedCardHeight)
-                                            .graphicsLayer { alpha = expansionFraction }
+                                            .fillMaxWidth()
+                                            .height(animatedCardHeight)
                                             .shadow(elevation = 2.dp, shape = RoundedCornerShape(animatedCardCornerRadius))
                                             .clip(RoundedCornerShape(animatedCardCornerRadius))
                                             .background(cardBackgroundColor)
@@ -1098,9 +1040,10 @@ fun NovaBarUi() {
                                             }
                                     ) {
                                         val presentationMode = if (isThisCardExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
+                                        val compactPillHeightDp = (44 + settings.barHeightPadding).dp.coerceAtLeast(30.dp)
                                         Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
+                                            modifier = Modifier.fillMaxSize().then(if (isThisCardExpanded) Modifier.padding(top = compactPillHeightDp) else Modifier),
+                                            contentAlignment = if (isThisCardExpanded) Alignment.TopCenter else Alignment.Center
                                         ) {
                                             when (activity) {
                                                 is OverlayState.PhoneCall -> PhoneCallView(activity.data, presentationMode, foregroundColor, textSizeOffset, null) {
@@ -1111,7 +1054,7 @@ fun NovaBarUi() {
                                                     currentState = presentationMode,
                                                     color = foregroundColor,
                                                     textSizeOffset = textSizeOffset,
-                                                    contentAlpha = contentAlpha.value,
+                                                    contentAlpha = 1f,
                                                     splitSegment = null
                                                 )
                                                 is OverlayState.Notification -> NotificationView(
@@ -1483,9 +1426,9 @@ fun NovaBarUi() {
                                     }
                                     is OverlayState.Charging -> {
                                         when (settings.defaultPresentationMode) {
-                                            "Minimized" -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.MINIMIZED
+                                            "Minimized" -> if (isExpanded) NowBarState.EXPANDED else NowBarState.MINIMIZED
                                             "Expanded" -> NowBarState.EXPANDED
-                                            else -> if (resolvedExpandedCharging) NowBarState.EXPANDED else NowBarState.COMPACT
+                                            else -> if (isExpanded) NowBarState.EXPANDED else NowBarState.COMPACT
                                         }
                                     }
                                     else -> {
@@ -1500,7 +1443,7 @@ fun NovaBarUi() {
                                 val stateTargetWidth = when (stateTargetState) {
                                     NowBarState.MINIMIZED -> (115 * settings.barWidthScale).dp
                                     NowBarState.COMPACT -> (185 * settings.barWidthScale).dp
-                                    NowBarState.EXPANDED -> 290.dp
+                                    NowBarState.EXPANDED -> screenWidthDp.dp
                                 }
                                 val stateTargetHeight = when (stateTargetState) {
                                     NowBarState.MINIMIZED -> (38 + settings.barHeightPadding).dp.coerceAtLeast(24.dp)
@@ -1510,18 +1453,18 @@ fun NovaBarUi() {
 
                                 val stateWidth by animateDpAsState(
                                     targetValue = stateTargetWidth,
-                                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
                                     label = "stateWidth"
                                 )
                                 val stateHeight by animateDpAsState(
                                     targetValue = stateTargetHeight,
-                                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 850f),
+                                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 850f),
                                     label = "stateHeight"
                                 )
 
                                 Box(
                                     modifier = Modifier
-                                        .requiredSize(stateWidth, stateHeight)
+                                        .fillMaxSize()
                                         .onGloballyPositioned { coordinates ->
                                             if (state == activeStateMap[activeStateKey]) {
                                                 val rect = coordinates.boundsInWindow()
@@ -1606,7 +1549,7 @@ fun NovaBarUi() {
                                             currentState = stateTargetState,
                                             color = foregroundColor,
                                             textSizeOffset = textSizeOffset,
-                                            contentAlpha = contentAlpha.value,
+                                            contentAlpha = 1f,
                                             splitSegment = null
                                         )
                                         is OverlayState.Notification -> NotificationView(

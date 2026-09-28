@@ -108,31 +108,17 @@ class OverlayHost(private val context: Context) {
         this.maxSupportedHeightPx = (maxSupportedHeightDp * density).toInt()
         val maxSupportedHeightPx = this.maxSupportedHeightPx
 
-        val widths = listOf(
-            (115f * settings.barWidthScale).toInt(),
-            (185f * settings.barWidthScale).toInt(),
-            290 // Expanded width
-        )
-        val maxSupportedWidthDp = widths.maxOrNull() ?: 290
-        this.maxSupportedWidthPx = (maxSupportedWidthDp * density).toInt()
-        val maxSupportedWidthPx = this.maxSupportedWidthPx
-
         val screenWidthPx = context.resources.displayMetrics.widthPixels
         val screenHeightPx = context.resources.displayMetrics.heightPixels
+        val screenWidthDp = screenWidthPx / density
+
+        this.maxSupportedWidthPx = screenWidthPx
+        val maxSupportedWidthPx = this.maxSupportedWidthPx
 
         val targetY = (settings.offsetY * density).toInt()
         val clampedY = targetY.coerceIn((-200 * density).toInt(), (screenHeightPx - maxSupportedHeightPx).coerceAtLeast(0))
 
-        val baseX = (settings.offsetX * density).toInt()
-        val clampedX = when (settings.barGravity) {
-            "Left", "Right" -> {
-                baseX.coerceIn(0, (screenWidthPx - maxSupportedWidthPx).coerceAtLeast(0))
-            }
-            else -> {
-                val maxOffset = (screenWidthPx - maxSupportedWidthPx) / 2
-                baseX.coerceIn(-maxOffset, maxOffset)
-            }
-        }
+        val clampedX = 0
 
         val initialMode = OverlayStateManager.windowMode.value
         val initialWidthDp = if (settings.cameraCutoutMode && (initialMode == "Minimized" || initialMode == "Compact")) {
@@ -151,7 +137,7 @@ class OverlayHost(private val context: Context) {
             when (initialMode) {
                 "Minimized" -> (115f * settings.barWidthScale).toInt()
                 "Compact" -> (185f * settings.barWidthScale).toInt()
-                else -> 290
+                else -> screenWidthDp.toInt()
             }
         }
         val initialWidthPx = (initialWidthDp * density).toInt()
@@ -173,11 +159,7 @@ class OverlayHost(private val context: Context) {
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = when (settings.barGravity) {
-                "Left" -> Gravity.TOP or Gravity.START
-                "Right" -> Gravity.TOP or Gravity.END
-                else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            }
+            gravity = Gravity.TOP or Gravity.START
             x = clampedX
             y = clampedY
 
