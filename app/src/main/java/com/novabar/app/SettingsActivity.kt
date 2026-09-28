@@ -839,8 +839,8 @@ fun AppearanceStudioScreen(viewModel: SettingsViewModel, settings: NovaSettings)
                     if (settings.cameraCutoutMode) {
                         SliderSetting(
                             title = "Camera Cutout Size Scale: ${String.format(java.util.Locale.US, "%.1fx", settings.cameraCutoutGapScale)}",
-                            value = settings.cameraCutoutGapScale,
-                            valueRange = 0.7f..2.0f,
+                            value = settings.cameraCutoutGapScale.coerceIn(0.0f, 2.0f),
+                            valueRange = 0.0f..2.0f,
                             onValueChange = { viewModel.setCameraCutoutGapScale(it) }
                         )
                         SliderSetting(
@@ -3134,7 +3134,7 @@ fun AboutScreen(settings: NovaSettings) {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             packageInfo.versionName
         } catch (e: Exception) {
-            "2.0"
+            "2.1"
         }
     }
 
